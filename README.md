@@ -207,7 +207,7 @@ npm run build --workspace backend
 
 ## Live Links
 
-- Web deployment (Vercel): https://app-3vwi19f7s-harics-projects-ad7a45e9.vercel.app/
+- Web deployment (Vercel): https://app-six-lovat-86.vercel.app/
 - Android APK (Google Drive): https://drive.google.com/file/d/<your-apk-file-id>/view?usp=sharing
 
 ## Future Upcoming
