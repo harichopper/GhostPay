@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "GhostPay",
+    "slug": "ghostpay",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "scheme": "ghostpay",
+    "android": {
+      "package": "com.ghostpay.wallet",
+      "adaptiveIcon": {
+        "backgroundColor": "#05070B"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "acfd2fe9-5bdd-428e-9b85-5250116c5334"
+      }
+    }
+  }
+}

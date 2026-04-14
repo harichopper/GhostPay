@@ -232,4 +232,3 @@ npm run build --workspace backend
 ## Security Warning
 
 Never commit real private mnemonics. If any mnemonic was exposed during testing, rotate and move funds immediately.
-# GhostPay

@@ -1,0 +1,123 @@
+#pragma version 8
+
+txn ApplicationID
+int 0
+==
+bnz create
+
+txn OnCompletion
+int DeleteApplication
+==
+bnz delete
+
+txn OnCompletion
+int UpdateApplication
+==
+bnz update
+
+txn OnCompletion
+int NoOp
+==
+bnz no_op
+
+int 0
+return
+
+create:
+byte "admin"
+txn Sender
+app_global_put
+
+byte "payment_count"
+int 0
+app_global_put
+
+int 1
+return
+
+delete:
+byte "admin"
+app_global_get
+txn Sender
+==
+return
+
+update:
+byte "admin"
+app_global_get
+txn Sender
+==
+return
+
+no_op:
+txn NumAppArgs
+int 3
+==
+assert
+
+txna ApplicationArgs 0
+byte "record"
+==
+assert
+
+global GroupSize
+int 2
+==
+assert
+
+txn GroupIndex
+int 1
+==
+assert
+
+gtxn 0 TypeEnum
+int pay
+==
+assert
+
+gtxn 0 Sender
+txn Sender
+==
+assert
+
+txn NumAccounts
+int 1
+==
+assert
+
+gtxn 0 Receiver
+txna Accounts 1
+==
+assert
+
+txna ApplicationArgs 2
+btoi
+gtxn 0 Amount
+==
+assert
+
+byte "last_sender"
+gtxn 0 Sender
+app_global_put
+
+byte "last_receiver"
+gtxn 0 Receiver
+app_global_put
+
+byte "last_amount"
+gtxn 0 Amount
+app_global_put
+
+byte "last_ts"
+txna ApplicationArgs 1
+app_global_put
+
+byte "payment_count"
+byte "payment_count"
+app_global_get
+int 1
++
+app_global_put
+
+int 1
+return

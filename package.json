@@ -1,0 +1,17 @@
+{
+  "name": "ghostpay",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "app",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace backend\" \"npm run start --workspace app\"",
+    "dev:web": "concurrently \"npm run dev --workspace backend\" \"npm run web --workspace app\"",
+    "build": "npm run build --workspace backend && npm run build:web --workspace app"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}
