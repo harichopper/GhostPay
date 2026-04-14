@@ -14,14 +14,16 @@
   "dependencies": {
     "@expo-google-fonts/orbitron": "^0.2.3",
     "@expo-google-fonts/rajdhani": "^0.2.3",
-    "@react-native-async-storage/async-storage": "^1.24.0",
-    "@react-native-community/netinfo": "^11.4.1",
+    "@react-native-async-storage/async-storage": "1.23.1",
+    "@react-native-community/netinfo": "11.3.1",
     "algosdk": "^3.2.0",
     "expo": "~51.0.32",
     "expo-camera": "~15.0.16",
-    "expo-clipboard": "^55.0.13",
+    "expo-clipboard": "~6.0.3",
+    "expo-constants": "~16.0.2",
     "expo-font": "~12.0.10",
     "expo-linear-gradient": "~13.0.2",
+    "expo-linking": "~6.3.1",
     "expo-router": "~3.5.24",
     "expo-secure-store": "~13.0.2",
     "expo-status-bar": "~1.12.1",
@@ -40,6 +42,6 @@
   },
   "devDependencies": {
     "@types/react": "~18.2.79",
-    "typescript": "^5.6.2"
+    "typescript": "~5.3.3"
   }
 }
