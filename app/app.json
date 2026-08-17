@@ -19,13 +19,10 @@
       "bundler": "metro",
       "output": "static"
     },
-    "extra": {
-      "eas": {
-        "projectId": "acfd2fe9-5bdd-428e-9b85-5250116c5334"
-      }
-    },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      "expo-font",
+      "expo-secure-store"
     ]
   }
 }
