@@ -25,10 +25,56 @@ algorandRouter.get('/network', (_request, response) => {
   });
 });
 
+/**
+ * @openapi
+ * /api/algorand/signer:
+ *   get:
+ *     summary: Retrieve the backend signer account address
+ *     tags: [Algorand]
+ *     responses:
+ *       200:
+ *         description: Signer address retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 signerAddress:
+ *                   type: string
+ */
 algorandRouter.get('/signer', (_request, response) => {
   response.json({ signerAddress: getSignerAddress() });
 });
 
+/**
+ * @openapi
+ * /api/algorand/balance/{address}:
+ *   get:
+ *     summary: Retrieve the ALGO balance of a wallet address
+ *     tags: [Algorand]
+ *     parameters:
+ *       - in: path
+ *         name: address
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The Algorand address to query
+ *         example: "VMOY...ALGO...ADDR"
+ *     responses:
+ *       200:
+ *         description: Balance retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 balanceAlgo:
+ *                   type: number
+ *       400:
+ *         description: Invalid Algorand address
+ *       500:
+ *         description: Internal server error loading balance
+ */
 algorandRouter.get('/balance/:address', async (request, response) => {
   try {
     const { address } = request.params;
@@ -47,6 +93,37 @@ algorandRouter.get('/balance/:address', async (request, response) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/algorand/assets/{address}:
+ *   get:
+ *     summary: Retrieve assets held by an Algorand address
+ *     tags: [Algorand]
+ *     parameters:
+ *       - in: path
+ *         name: address
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The Algorand address to query assets for
+ *         example: "VMOY...ALGO...ADDR"
+ *     responses:
+ *       200:
+ *         description: List of assets retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 assets:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Invalid Algorand address
+ *       500:
+ *         description: Internal server error loading assets
+ */
 algorandRouter.get('/assets/:address', async (request, response) => {
   try {
     const { address } = request.params;

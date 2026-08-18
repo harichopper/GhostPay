@@ -1,6 +1,8 @@
 import cors from 'cors';
 import express from 'express';
+import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
+import { swaggerSpec } from './config/swagger.js';
 import { connectMongo } from './db/mongo.js';
 import { algorandRouter } from './routes/algorandRoutes.js';
 import { identityRouter } from './routes/identityRoutes.js';
@@ -9,6 +11,8 @@ const app = express();
 
 app.use(cors({ origin: env.corsOrigin }));
 app.use(express.json());
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.get('/health', (_request, response) => {
   response.json({ ok: true, service: 'ghostpay-backend' });
