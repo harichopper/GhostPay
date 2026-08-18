@@ -11,11 +11,14 @@ export default function TabsLayout() {
   const isDesktop = Platform.OS === 'web' && width > 768;
 
   const bottomPadding = Math.max(insets.bottom, Platform.OS === 'ios' ? 14 : 10);
+  const mainTabNames = ['index', 'analytics', 'send', 'transactions', 'settings'];
 
   return (
     <Tabs
       sceneContainerStyle={isDesktop ? styles.desktopSceneContainer : undefined}
       tabBar={({ state, descriptors, navigation }) => {
+        const visibleRoutes = state.routes.filter((r) => mainTabNames.includes(r.name));
+
         if (isDesktop) {
           return (
             <View style={styles.desktopSidebarWrapper}>
@@ -28,9 +31,10 @@ export default function TabsLayout() {
 
                 {/* Vertical Navigation Items */}
                 <View style={styles.sidebarNavList}>
-                  {state.routes.map((route, index) => {
+                  {visibleRoutes.map((route) => {
                     const { options } = descriptors[route.key];
-                    const isFocused = state.index === index;
+                    const activeRouteName = state.routes[state.index]?.name;
+                    const isFocused = activeRouteName === route.name;
 
                     const onPress = () => {
                       const event = navigation.emit({
@@ -78,9 +82,10 @@ export default function TabsLayout() {
         return (
           <View style={styles.tabBarWrapper}>
             <View style={[styles.tabBarContainer, { paddingBottom: bottomPadding }]}>
-              {state.routes.map((route, index) => {
+              {visibleRoutes.map((route, index) => {
                 const { options } = descriptors[route.key];
-                const isFocused = state.index === index;
+                const activeRouteName = state.routes[state.index]?.name;
+                const isFocused = activeRouteName === route.name;
 
                 const onPress = () => {
                   const event = navigation.emit({
@@ -131,6 +136,7 @@ export default function TabsLayout() {
       <Tabs.Screen name='send' options={{ title: 'Scan' }} />
       <Tabs.Screen name='transactions' options={{ title: 'History' }} />
       <Tabs.Screen name='settings' options={{ title: 'Settings' }} />
+      <Tabs.Screen name='notification' options={{ href: null, title: 'Notifications' }} />
     </Tabs>
   );
 }

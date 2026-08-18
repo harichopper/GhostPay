@@ -163,7 +163,7 @@ export default function HomeScreen() {
 
             <Pressable
               style={styles.iconCircleButton}
-              onPress={() => Toast.show({ type: 'info', text1: 'Notifications', text2: 'No unread alerts' })}
+              onPress={() => router.push('/notification')}
             >
               <Ionicons name="notifications-outline" size={20} color={colors.primaryDark} />
               <View style={styles.notifBadge} />
