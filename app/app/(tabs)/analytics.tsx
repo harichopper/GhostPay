@@ -4,11 +4,13 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View
 } from 'react-native';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
@@ -17,6 +19,8 @@ import { colors } from '../../src/theme/colors';
 
 export default function AnalyticsScreen() {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width > 768;
   const [analyticsKey, setAnalyticsKey] = useState(0);
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'week' | 'year'>('month');
   const [selectedBar, setSelectedBar] = useState(2); // Wed ($450)
@@ -57,7 +61,7 @@ export default function AnalyticsScreen() {
     <SafeAreaView style={styles.safeArea}>
       <LinearGradient
         colors={['#FBFDFC', '#F0F7F3', '#E4F2EB']}
-        style={styles.gradientContainer}
+        style={[styles.gradientContainer, isDesktop && styles.gradientContainerDesktop]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
@@ -358,6 +362,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10
+  },
+  gradientContainerDesktop: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    marginBottom: 0
   },
   headerBar: {
     flexDirection: 'row',

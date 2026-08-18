@@ -13,6 +13,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View
 } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
@@ -75,6 +76,8 @@ const AnimatedCounter = ({
 export default function HomeScreen() {
   const router = useRouter();
   const { walletAddress, balanceAlgo, transactions, isConnected, demoMode, toggleDemoOffline } = useWalletStore();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width > 768;
 
   const isOnline = isConnected && !demoMode?.simulateOffline;
   const [isBalanceHidden, setIsBalanceHidden] = useState(false);
@@ -117,7 +120,7 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.safeArea}>
       <LinearGradient
         colors={['#FBFDFC', '#F0F7F3', '#E4F2EB']}
-        style={styles.gradientContainer}
+        style={[styles.gradientContainer, isDesktop && styles.gradientContainerDesktop]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
@@ -424,6 +427,11 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10
+  },
+  gradientContainerDesktop: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    marginBottom: 0
   },
   headerBar: {
     flexDirection: 'row',

@@ -14,58 +14,114 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      tabBar={({ state, descriptors, navigation }) => (
-        <View style={styles.tabBarWrapper}>
-          <View
-            style={[
-              styles.tabBarContainer,
-              { paddingBottom: bottomPadding },
-              isDesktop && styles.desktopTabBar
-            ]}
-          >
-            {state.routes.map((route, index) => {
-              const { options } = descriptors[route.key];
-              const isFocused = state.index === index;
+      sceneContainerStyle={isDesktop ? styles.desktopSceneContainer : undefined}
+      tabBar={({ state, descriptors, navigation }) => {
+        if (isDesktop) {
+          return (
+            <View style={styles.desktopSidebarWrapper}>
+              <View>
+                {/* Sidebar Brand Header */}
+                <View style={styles.sidebarBrandRow}>
+                  <Ionicons name="flash-sharp" size={22} color={colors.secondary} />
+                  <Text style={styles.sidebarBrandText}>GHOSTPAY</Text>
+                </View>
 
-              const onPress = () => {
-                const event = navigation.emit({
-                  type: 'tabPress',
-                  target: route.key,
-                  canPreventDefault: true
-                });
+                {/* Vertical Navigation Items */}
+                <View style={styles.sidebarNavList}>
+                  {state.routes.map((route, index) => {
+                    const { options } = descriptors[route.key];
+                    const isFocused = state.index === index;
 
-                if (!isFocused && !event.defaultPrevented) {
-                  navigation.navigate(route.name);
-                }
-              };
+                    const onPress = () => {
+                      const event = navigation.emit({
+                        type: 'tabPress',
+                        target: route.key,
+                        canPreventDefault: true
+                      });
 
-              const isCenter = index === 2 || route.name === 'send';
+                      if (!isFocused && !event.defaultPrevented) {
+                        navigation.navigate(route.name);
+                      }
+                    };
 
-              return (
-                <Pressable
-                  key={route.key}
-                  onPress={onPress}
-                  style={styles.tabButton}
-                  accessibilityRole='button'
-                  accessibilityState={isFocused ? { selected: true } : {}}
-                  accessibilityLabel={options.title}
-                >
-                  {isCenter ? (
-                    <View style={styles.centerActiveContainer}>
-                      <Ionicons name='qr-code' size={26} color={colors.primaryDark} />
-                    </View>
-                  ) : (
-                    <>
-                      <RenderTabIcon name={route.name} isFocused={isFocused} />
-                      <Text style={styles.tabLabel}>{options.title}</Text>
-                    </>
-                  )}
-                </Pressable>
-              );
-            })}
+                    return (
+                      <Pressable
+                        key={route.key}
+                        onPress={onPress}
+                        style={[
+                          styles.sidebarNavItem,
+                          isFocused && styles.sidebarNavItemActive
+                        ]}
+                      >
+                        <RenderTabIcon name={route.name} isFocused={isFocused} />
+                        <Text style={[styles.sidebarNavText, isFocused && styles.sidebarNavTextActive]}>
+                          {options.title}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+
+              {/* Sidebar Bottom Footer */}
+              <View style={styles.sidebarFooter}>
+                <View style={styles.sidebarStatusBadge}>
+                  <View style={styles.sidebarStatusDot} />
+                  <Text style={styles.sidebarStatusText}>Algorand Testnet</Text>
+                </View>
+              </View>
+            </View>
+          );
+        }
+
+        // Mobile Bottom Tab Bar
+        return (
+          <View style={styles.tabBarWrapper}>
+            <View style={[styles.tabBarContainer, { paddingBottom: bottomPadding }]}>
+              {state.routes.map((route, index) => {
+                const { options } = descriptors[route.key];
+                const isFocused = state.index === index;
+
+                const onPress = () => {
+                  const event = navigation.emit({
+                    type: 'tabPress',
+                    target: route.key,
+                    canPreventDefault: true
+                  });
+
+                  if (!isFocused && !event.defaultPrevented) {
+                    navigation.navigate(route.name);
+                  }
+                };
+
+                const isCenter = index === 2 || route.name === 'send';
+
+                return (
+                  <Pressable
+                    key={route.key}
+                    onPress={onPress}
+                    style={styles.tabButton}
+                    accessibilityRole='button'
+                    accessibilityState={isFocused ? { selected: true } : {}}
+                    accessibilityLabel={options.title}
+                  >
+                    {isCenter ? (
+                      <View style={styles.centerActiveContainer}>
+                        <Ionicons name='qr-code' size={26} color={colors.primaryDark} />
+                      </View>
+                    ) : (
+                      <>
+                        <RenderTabIcon name={route.name} isFocused={isFocused} />
+                        <Text style={styles.tabLabel}>{options.title}</Text>
+                      </>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-        </View>
-      )}
+        );
+      }}
       screenOptions={{
         headerShown: false
       }}
@@ -96,12 +152,96 @@ function RenderTabIcon({ name, isFocused }: { name: string; isFocused: boolean }
     case 'settings':
       return <Ionicons name={isFocused ? 'settings' : 'settings-outline'} size={iconSize} color={iconColor} />;
 
+    case 'send':
+      return <Ionicons name={isFocused ? 'qr-code' : 'qr-code-outline'} size={iconSize} color={iconColor} />;
+
     default:
       return null;
   }
 }
 
 const styles = StyleSheet.create({
+  desktopSceneContainer: {
+    marginLeft: 240
+  },
+  desktopSidebarWrapper: {
+    position: (Platform.OS === 'web' ? 'fixed' : 'absolute') as any,
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: 240,
+    backgroundColor: '#172B3E',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(255, 255, 255, 0.08)',
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+    justifyContent: 'space-between',
+    zIndex: 9999
+  },
+  sidebarBrandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    marginBottom: 32
+  },
+  sidebarBrandText: {
+    color: colors.white,
+    fontSize: 16,
+    fontFamily: 'Orbitron_700Bold',
+    marginLeft: 10,
+    letterSpacing: 1
+  },
+  sidebarNavList: {
+    gap: 8
+  },
+  sidebarNavItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: 'transparent'
+  },
+  sidebarNavItemActive: {
+    backgroundColor: 'rgba(5, 218, 147, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(5, 218, 147, 0.3)'
+  },
+  sidebarNavText: {
+    color: 'rgba(255, 255, 255, 0.65)',
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    marginLeft: 12
+  },
+  sidebarNavTextActive: {
+    color: colors.secondary,
+    fontFamily: 'Inter_700Bold'
+  },
+  sidebarFooter: {
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.08)'
+  },
+  sidebarStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12
+  },
+  sidebarStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.secondary,
+    marginRight: 8
+  },
+  sidebarStatusText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold'
+  },
   tabBarWrapper: {
     position: 'absolute',
     bottom: 0,
@@ -127,11 +267,6 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0,
     shadowRadius: 0
-  },
-  desktopTabBar: {
-    maxWidth: 480,
-    borderRadius: 16,
-    marginBottom: 16
   },
   tabButton: {
     flex: 1,
