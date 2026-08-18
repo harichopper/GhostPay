@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   tabLabel: {
     color: colors.white, // #FFFFFF
     fontSize: 11,
-    fontFamily: 'Rajdhani_600SemiBold',
+    fontFamily: 'Inter_600SemiBold',
     marginTop: 4
   }
 });

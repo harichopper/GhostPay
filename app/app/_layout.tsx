@@ -3,7 +3,13 @@ import { StatusBar } from 'expo-status-bar';
 import NetInfo from '@react-native-community/netinfo';
 import { useFonts } from 'expo-font';
 import { Orbitron_700Bold } from '@expo-google-fonts/orbitron';
-import { Rajdhani_700Bold, Rajdhani_500Medium } from '@expo-google-fonts/rajdhani';
+import { Rajdhani_700Bold, Rajdhani_600SemiBold, Rajdhani_500Medium } from '@expo-google-fonts/rajdhani';
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold
+} from '@expo-google-fonts/inter';
 import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
@@ -16,7 +22,12 @@ export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     Orbitron_700Bold,
     Rajdhani_700Bold,
-    Rajdhani_500Medium
+    Rajdhani_600SemiBold,
+    Rajdhani_500Medium,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold
   });
 
   const setConnectionStatus = useWalletStore((state) => state.setConnectionStatus);

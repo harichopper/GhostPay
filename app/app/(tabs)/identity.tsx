@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
   subtitle: {
     color: colors.primaryDark,
     fontSize: 14,
-    fontFamily: 'Rajdhani_500Medium',
+    fontFamily: 'Inter_500Medium',
     textAlign: 'center'
   }
 });

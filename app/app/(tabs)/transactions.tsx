@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -11,6 +12,7 @@ import {
   TextInput,
   View
 } from 'react-native';
+import Animated, { FadeInDown, FadeInUp, ZoomIn } from 'react-native-reanimated';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
 
@@ -116,6 +118,14 @@ export default function TransactionsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [selectedWalletLabel, setSelectedWalletLabel] = useState('•••• 2872');
+  const [focusKey, setFocusKey] = useState(0);
+
+  // Trigger animations every time screen is focused (tab navigation)
+  useFocusEffect(
+    useCallback(() => {
+      setFocusKey((prev) => prev + 1);
+    }, [])
+  );
 
   const formattedWalletAddress = useMemo(() => {
     if (!walletAddress) return '•••• 2872';
@@ -163,20 +173,19 @@ export default function TransactionsScreen() {
     return groups;
   }, [filteredTxList]);
 
-  return (
-    <LinearGradient
-      colors={['#E8F6F0', '#CFECE0', '#BDE4D4']}
-      style={styles.gradientContainer}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-    >
-      {/* Background Ambient Glow Effects */}
-      <View style={styles.topGlowEffect} />
-      <View style={styles.bottomGlowEffect} />
+  let globalTxIndex = 0;
 
-      <SafeAreaView style={styles.safeArea}>
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <LinearGradient
+        key={focusKey}
+        colors={['#FBFDFC', '#F0F7F3', '#E4F2EB']}
+        style={styles.gradientContainer}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
         {/* Header Bar */}
-        <View style={styles.header}>
+        <Animated.View entering={FadeInDown.duration(400).delay(80)} style={styles.header}>
           <Pressable style={styles.iconButton} onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={22} color={colors.primaryDark} />
           </Pressable>
@@ -189,11 +198,11 @@ export default function TransactionsScreen() {
           >
             <Ionicons name="search-outline" size={22} color={colors.primaryDark} />
           </Pressable>
-        </View>
+        </Animated.View>
 
         {/* Search Bar Input (toggled on search press) */}
         {isSearchVisible && (
-          <View style={styles.searchBarContainer}>
+          <Animated.View entering={FadeInDown.duration(300)} style={styles.searchBarContainer}>
             <Ionicons name="search" size={18} color={colors.primaryDark} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
@@ -208,11 +217,11 @@ export default function TransactionsScreen() {
                 <Ionicons name="close-circle" size={18} color={colors.primaryDark} />
               </Pressable>
             )}
-          </View>
+          </Animated.View>
         )}
 
         {/* Account / Mastercard Pill Indicator */}
-        <View style={styles.pillWrapper}>
+        <Animated.View entering={ZoomIn.duration(400).delay(150)} style={styles.pillWrapper}>
           <View style={styles.cardPill}>
             <View style={styles.mastercardDots}>
               <View style={[styles.dot, { backgroundColor: '#EB001B' }]} />
@@ -221,7 +230,7 @@ export default function TransactionsScreen() {
             <Text style={styles.cardPillText}>{displayWalletText}</Text>
             <Ionicons name="chevron-down" size={14} color="rgba(255, 255, 255, 0.7)" style={{ marginLeft: 4 }} />
           </View>
-        </View>
+        </Animated.View>
 
         {/* Grouped Transaction List */}
         <ScrollView
@@ -229,100 +238,100 @@ export default function TransactionsScreen() {
           contentContainerStyle={styles.scrollContent}
         >
           {Object.keys(groupedTx).length === 0 ? (
-            <View style={styles.emptyContainer}>
+            <Animated.View entering={FadeInUp.duration(400)} style={styles.emptyContainer}>
               <Ionicons name="receipt-outline" size={48} color={colors.textMuted} />
               <Text style={styles.emptyText}>No transactions found</Text>
-            </View>
+            </Animated.View>
           ) : (
-            Object.entries(groupedTx).map(([dateGroup, items]) => (
+            Object.entries(groupedTx).map(([dateGroup, items], groupIndex) => (
               <View key={dateGroup} style={styles.sectionGroup}>
-                <Text style={styles.dateGroupHeader}>{dateGroup}</Text>
-                {items.map((item) => (
-                  <View key={item.id} style={styles.txCard}>
-                    {/* Avatar / Brand Badge */}
-                    <View style={[styles.avatarContainer, { backgroundColor: item.iconBg }]}>
-                      {item.iconName ? (
-                        <Ionicons name={item.iconName} size={20} color={colors.white} />
-                      ) : (
-                        <Text style={styles.avatarText}>{item.iconText}</Text>
-                      )}
-                    </View>
-
-                    {/* Details */}
-                    <View style={styles.txDetails}>
-                      <Text style={styles.txName}>{item.name}</Text>
-                      <View style={styles.txStatusRow}>
-                        <Text style={styles.txType}>{item.type}</Text>
-                        <Ionicons
-                          name={item.type === 'Received' ? 'checkmark-circle' : 'time-outline'}
-                          size={14}
-                          color="#667085"
-                          style={{ marginLeft: 4 }}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Amount */}
-                    <Text
-                      style={[
-                        styles.txAmount,
-                        item.isPositive ? styles.amountPositive : styles.amountNegative
-                      ]}
+                <Animated.Text
+                  entering={FadeInDown.duration(300).delay(200 + groupIndex * 100)}
+                  style={styles.dateGroupHeader}
+                >
+                  {dateGroup}
+                </Animated.Text>
+                {items.map((item) => {
+                  const currentIndex = globalTxIndex++;
+                  return (
+                    <Animated.View
+                      key={item.id}
+                      entering={FadeInDown.delay(220 + currentIndex * 70).duration(450).springify().damping(15)}
+                      style={styles.txCard}
                     >
-                      {item.amount}
-                    </Text>
-                  </View>
-                ))}
+                      {/* Avatar / Brand Badge */}
+                      <View style={[styles.avatarContainer, { backgroundColor: item.iconBg }]}>
+                        {item.iconName ? (
+                          <Ionicons name={item.iconName} size={20} color={colors.white} />
+                        ) : (
+                          <Text style={styles.avatarText}>{item.iconText}</Text>
+                        )}
+                      </View>
+
+                      {/* Details */}
+                      <View style={styles.txDetails}>
+                        <Text style={styles.txName}>{item.name}</Text>
+                        <View style={styles.txStatusRow}>
+                          <Text style={styles.txType}>{item.type}</Text>
+                          <Ionicons
+                            name={item.type === 'Received' ? 'checkmark-circle' : 'time-outline'}
+                            size={14}
+                            color="#667085"
+                            style={{ marginLeft: 4 }}
+                          />
+                        </View>
+                      </View>
+
+                      {/* Amount */}
+                      <Text
+                        style={[
+                          styles.txAmount,
+                          item.isPositive ? styles.amountPositive : styles.amountNegative
+                        ]}
+                      >
+                        {item.amount}
+                      </Text>
+                    </Animated.View>
+                  );
+                })}
               </View>
             ))
           )}
         </ScrollView>
-      </SafeAreaView>
-    </LinearGradient>
+      </LinearGradient>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  gradientContainer: {
-    flex: 1
-  },
-  topGlowEffect: {
-    position: 'absolute',
-    top: -80,
-    left: '20%',
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: '#FFFFFF',
-    opacity: 0.5,
-    transform: [{ scaleX: 1.5 }]
-  },
-  bottomGlowEffect: {
-    position: 'absolute',
-    bottom: 40,
-    right: -40,
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    backgroundColor: '#A8E2CC',
-    opacity: 0.4
-  },
   safeArea: {
-    flex: 1
+    flex: 1,
+    backgroundColor: colors.primaryDark
+  },
+  gradientContainer: {
+    flex: 1,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    marginBottom: 88,
+    overflow: 'hidden',
+    elevation: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 50,
+    paddingTop: 40,
     paddingBottom: 8
   },
   headerTitle: {
     color: colors.primaryDark,
-    fontSize: 18,
+    fontSize: 22,
     fontFamily: 'Orbitron_700Bold',
-    letterSpacing: 0.5
+    letterSpacing: -0.3
   },
   iconButton: {
     width: 40,
@@ -350,7 +359,7 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.primaryDark,
     fontSize: 14,
-    fontFamily: 'Rajdhani_500Medium'
+    fontFamily: 'Inter_500Medium'
   },
   pillWrapper: {
     alignItems: 'center',
@@ -379,36 +388,42 @@ const styles = StyleSheet.create({
   cardPillText: {
     color: colors.white,
     fontSize: 14,
-    fontFamily: 'Rajdhani_600SemiBold',
-    letterSpacing: 0.5
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 0.3
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 110 // Ensures smooth scrolling above bottom floating navigation bar
+    paddingBottom: 24
   },
   sectionGroup: {
     marginBottom: 12
   },
   dateGroupHeader: {
     color: '#5C768D',
-    fontSize: 14,
-    fontFamily: 'Rajdhani_600SemiBold',
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
     textAlign: 'center',
     marginVertical: 10
   },
   txCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF', // Bright solid White Card
+    backgroundColor: 'rgba(255, 255, 255, 0.82)', // Frosted glass whitish card
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 14,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.95)',
     elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    ...(Platform.OS === 'web' && {
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)'
+    })
   },
   avatarContainer: {
     width: 44,
@@ -420,16 +435,16 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     color: colors.white,
-    fontSize: 15,
-    fontFamily: 'Rajdhani_700Bold'
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold'
   },
   txDetails: {
     flex: 1
   },
   txName: {
     color: '#172B3E', // Dark Navy text inside white card
-    fontSize: 16,
-    fontFamily: 'Rajdhani_600SemiBold',
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
     marginBottom: 2
   },
   txStatusRow: {
@@ -438,13 +453,13 @@ const styles = StyleSheet.create({
   },
   txType: {
     color: '#667085', // Dark Gray muted text
-    fontSize: 13,
-    fontFamily: 'Rajdhani_500Medium'
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium'
   },
   txAmount: {
-    fontSize: 17,
-    fontFamily: 'Rajdhani_700Bold',
-    letterSpacing: 0.3
+    fontSize: 16,
+    fontFamily: 'Inter_700Bold',
+    letterSpacing: -0.2
   },
   amountPositive: {
     color: '#12B76A' // Vibrant Green for received
@@ -459,8 +474,8 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: colors.textMuted,
-    fontSize: 15,
-    fontFamily: 'Rajdhani_500Medium',
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
     marginTop: 12
   }
 });
