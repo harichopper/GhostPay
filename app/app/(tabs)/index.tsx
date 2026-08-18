@@ -14,10 +14,54 @@ import {
   Text,
   View
 } from 'react-native';
-import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
+
+// Smooth Count-Up Animated Counter for Total Balance
+const AnimatedCounter = ({ targetValue, isHidden }: { targetValue: number; isHidden: boolean }) => {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (isHidden) return;
+      let animationFrameId: number;
+      const duration = 750;
+      const startTime = Date.now();
+
+      const animate = () => {
+        const now = Date.now();
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Cubic ease-out curve
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const current = targetValue * easeOut;
+        setDisplayValue(current);
+
+        if (progress < 1) {
+          animationFrameId = requestAnimationFrame(animate);
+        }
+      };
+
+      animationFrameId = requestAnimationFrame(animate);
+
+      return () => {
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      };
+    }, [targetValue, isHidden])
+  );
+
+  if (isHidden) {
+    return <Text style={styles.balanceAmountText}>$ • • • • •</Text>;
+  }
+
+  return (
+    <Text style={styles.balanceAmountText}>
+      ${displayValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+    </Text>
+  );
+};
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -26,20 +70,12 @@ export default function HomeScreen() {
   const isOnline = isConnected && !demoMode?.simulateOffline;
   const [isBalanceHidden, setIsBalanceHidden] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [homeKey, setHomeKey] = useState(0);
-
-  // Trigger entrance animations every time home screen is focused
-  useFocusEffect(
-    useCallback(() => {
-      setHomeKey((prev) => prev + 1);
-    }, [])
-  );
 
   const formattedAddress = walletAddress
     ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
     : '•••• 2872';
 
-  const displayBalance = balanceAlgo !== null ? balanceAlgo.toFixed(2) : '12,480.50';
+  const numericBalance = balanceAlgo !== null ? balanceAlgo : 12480.50;
 
   const handleCopyAddress = async () => {
     if (walletAddress) {
@@ -114,12 +150,11 @@ export default function HomeScreen() {
         </View>
 
         <ScrollView
-          key={homeKey}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
           {/* Main Digital Card Display */}
-          <Animated.View entering={FadeInDown.duration(450).delay(60)} style={styles.digitalCardContainer}>
+          <View style={styles.digitalCardContainer}>
             {/* Top Stacked Card Peeking Layer (Neon Mint #05DA93) */}
             <LinearGradient
               colors={['#05DA93', '#00B87A']}
@@ -167,12 +202,10 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
 
-              {/* Balance Amount */}
+              {/* Balance Amount with Smooth Count-Up Animation */}
               <View style={styles.balanceContainer}>
                 <Text style={styles.balanceLabel}>TOTAL BALANCE</Text>
-                <Text style={styles.balanceAmountText}>
-                  {isBalanceHidden ? '$ • • • • •' : `$${displayBalance}`}
-                </Text>
+                <AnimatedCounter targetValue={numericBalance} isHidden={isBalanceHidden} />
               </View>
 
               {/* Card Footer Row */}
@@ -189,10 +222,10 @@ export default function HomeScreen() {
                 />
               </View>
             </LinearGradient>
-          </Animated.View>
+          </View>
 
           {/* Dual Promo Row (Pay Super-Fast & Scan & Pay) */}
-          <Animated.View entering={FadeInDown.duration(450).delay(150)} style={styles.dualPromoRow}>
+          <View style={styles.dualPromoRow}>
             {/* Left Card: Pay Super-Fast / Offline Vault */}
             <Pressable style={styles.promoCardLeft} onPress={toggleDemoOffline}>
               <View style={styles.promoIconWrapper}>
@@ -214,10 +247,10 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.scanPayText}>Scan & pay</Text>
             </Pressable>
-          </Animated.View>
+          </View>
 
           {/* Quick Action Grid (Send, Receive, History, Others) */}
-          <Animated.View entering={FadeInDown.duration(450).delay(120)} style={styles.actionGridContainer}>
+          <View style={styles.actionGridContainer}>
             <Pressable style={styles.actionItem} onPress={() => router.push('/send')}>
               <View style={[styles.actionIconCircle, { backgroundColor: '#E4F2EB' }]}>
                 <Ionicons name="paper-plane" size={22} color={colors.primaryDark} />
@@ -245,10 +278,10 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.actionItemText}>Others</Text>
             </Pressable>
-          </Animated.View>
+          </View>
 
           {/* Dual Action Pill Bar: My QR Code | GHOST ID + Copy */}
-          <Animated.View entering={FadeInDown.duration(450).delay(180)} style={styles.idPillBar}>
+          <View style={styles.idPillBar}>
             {/* Left side: My QR code > */}
             <Pressable style={styles.idPillLeft} onPress={() => setIsQrModalOpen(true)}>
               <Ionicons name="qr-code-outline" size={17} color={colors.primaryDark} style={{ marginRight: 6 }} />
@@ -264,18 +297,18 @@ export default function HomeScreen() {
               <Text style={styles.idPillRightText}>GHOST ID: ghostpay@algo</Text>
               <Ionicons name="copy-outline" size={15} color={colors.primaryDark} style={{ marginLeft: 6 }} />
             </Pressable>
-          </Animated.View>
+          </View>
 
           {/* Recent Activity Section Header */}
-          <Animated.View entering={FadeInDown.duration(450).delay(240)} style={styles.sectionHeaderRow}>
+          <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionHeaderTitle}>Recent Activity</Text>
             <Pressable onPress={() => router.push('/transactions')}>
               <Text style={styles.seeAllLinkText}>See All</Text>
             </Pressable>
-          </Animated.View>
+          </View>
 
           {/* Recent Transactions List Preview */}
-          <Animated.View entering={FadeInDown.duration(450).delay(300)}>
+          <View>
             {/* Tx 1 */}
             <View style={styles.txCard}>
               <View style={[styles.avatarContainer, { backgroundColor: '#172B3E' }]}>
@@ -311,7 +344,7 @@ export default function HomeScreen() {
               </View>
               <Text style={[styles.txAmount, styles.amountNegative]}>-$124.55</Text>
             </View>
-          </Animated.View>
+          </View>
         </ScrollView>
       </LinearGradient>
 

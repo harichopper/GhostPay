@@ -71,7 +71,7 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name='index' options={{ title: 'Home' }} />
-      <Tabs.Screen name='identity' options={{ title: 'Favorites' }} />
+      <Tabs.Screen name='identity' options={{ title: 'Analytics' }} />
       <Tabs.Screen name='send' options={{ title: 'Scan' }} />
       <Tabs.Screen name='transactions' options={{ title: 'History' }} />
       <Tabs.Screen name='settings' options={{ title: 'Settings' }} />
@@ -91,7 +91,7 @@ function RenderTabIcon({ name, isFocused }: { name: string; isFocused: boolean }
       return <Ionicons name={isFocused ? 'receipt' : 'receipt-outline'} size={iconSize} color={iconColor} />;
 
     case 'identity':
-      return <Ionicons name={isFocused ? 'shield-checkmark' : 'shield-checkmark-outline'} size={iconSize} color={iconColor} />;
+      return <Ionicons name={isFocused ? 'bar-chart' : 'bar-chart-outline'} size={iconSize} color={iconColor} />;
 
     case 'settings':
       return <Ionicons name={isFocused ? 'settings' : 'settings-outline'} size={iconSize} color={iconColor} />;
