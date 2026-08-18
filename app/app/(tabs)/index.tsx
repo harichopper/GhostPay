@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
     marginBottom: 24
   },
   balanceLabel: {
-    color: 'rgba(255, 255, 255, 0.6)',
+    color: 'rgba(255, 255, 255, 0.93)',
     fontSize: 11,
     fontFamily: 'Inter_700Bold',
     letterSpacing: 0.8,
@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
   },
   cardAddressGroup: {},
   cardAddressLabel: {
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: 'rgba(255, 255, 255, 0.93)',
     fontSize: 10,
     fontFamily: 'Inter_600SemiBold',
     letterSpacing: 0.5
