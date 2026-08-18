@@ -12,7 +12,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast, { ToastConfigParams } from 'react-native-toast-message';
 import { useWalletStore } from '../src/store/walletStore';
@@ -49,6 +49,7 @@ const toastConfig = {
 
 export default function RootLayout() {
   const [isClientMounted, setIsClientMounted] = useState(false);
+  const [isAppLoading, setIsAppLoading] = useState(true);
 
   const [fontsLoaded] = useFonts({
     Orbitron_700Bold,
@@ -69,6 +70,12 @@ export default function RootLayout() {
   useEffect(() => {
     hydrateSampleData();
     void loadNetworkInfo();
+
+    const loaderTimer = setTimeout(() => {
+      setIsAppLoading(false);
+    }, 1800);
+
+    return () => clearTimeout(loaderTimer);
   }, [hydrateSampleData, loadNetworkInfo]);
 
   useEffect(() => {
@@ -116,6 +123,19 @@ export default function RootLayout() {
       </Stack>
       <StatusBar style='light' />
       {Platform.OS !== 'web' || isClientMounted ? <Toast config={toastConfig} /> : null}
+
+      {isAppLoading && (
+        <View style={splashStyles.fullScreenOverlay} pointerEvents="auto">
+          <StatusBar style="light" />
+          <View style={splashStyles.logoOuterRing}>
+            <Image
+              source={require('../assets/branding/ghostpay-logo.png')}
+              style={splashStyles.logoImage}
+              resizeMode="contain"
+            />
+          </View>
+        </View>
+      )}
     </SafeAreaProvider>
   );
 }
@@ -170,5 +190,30 @@ const toastStyles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.75)',
     fontSize: 12,
     fontFamily: 'Inter_500Medium'
+  }
+});
+
+const splashStyles = StyleSheet.create({
+  fullScreenOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 99999,
+    elevation: 99999
+  },
+  logoOuterRing: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: 'rgba(5, 218, 147, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(5, 218, 147, 0.35)'
+  },
+  logoImage: {
+    width: 48,
+    height: 48
   }
 });
