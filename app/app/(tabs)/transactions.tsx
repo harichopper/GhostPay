@@ -337,20 +337,30 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(23, 43, 62, 0.08)',
+    backgroundColor: '#FFFFFF', // Pure White button background
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6
   },
   searchBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(23, 43, 62, 0.08)',
+    backgroundColor: '#FFFFFF', // Pure White search container background
     borderRadius: 14,
     marginHorizontal: 20,
     marginTop: 8,
     marginBottom: 4,
     paddingHorizontal: 12,
-    height: 42
+    height: 44,
+    elevation: 2,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6
   },
   searchIcon: {
     marginRight: 8
@@ -408,22 +418,16 @@ const styles = StyleSheet.create({
   txCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.82)', // Frosted glass whitish card
+    backgroundColor: '#FFFFFF', // 100% Pure Solid White Card
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 14,
     marginBottom: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.95)',
-    elevation: 4,
+    elevation: 3,
     shadowColor: '#172B3E',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
-    shadowRadius: 12,
-    ...(Platform.OS === 'web' && {
-      backdropFilter: 'blur(16px)',
-      WebkitBackdropFilter: 'blur(16px)'
-    })
+    shadowRadius: 10
   },
   avatarContainer: {
     width: 44,

@@ -71,9 +71,9 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name='index' options={{ title: 'Home' }} />
-      <Tabs.Screen name='transactions' options={{ title: 'History' }} />
-      <Tabs.Screen name='send' options={{ title: 'Scan' }} />
       <Tabs.Screen name='identity' options={{ title: 'Favorites' }} />
+      <Tabs.Screen name='send' options={{ title: 'Scan' }} />
+      <Tabs.Screen name='transactions' options={{ title: 'History' }} />
       <Tabs.Screen name='settings' options={{ title: 'Settings' }} />
     </Tabs>
   );
