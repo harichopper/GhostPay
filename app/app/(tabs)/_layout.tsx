@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../src/theme/colors';
 
@@ -52,10 +52,13 @@ export default function TabsLayout() {
                 >
                   {isCenter ? (
                     <View style={styles.centerActiveContainer}>
-                      <Ionicons name='scan-outline' size={24} color={colors.primaryDark} />
+                      <Ionicons name='qr-code' size={26} color={colors.primaryDark} />
                     </View>
                   ) : (
-                    <RenderTabIcon name={route.name} isFocused={isFocused} />
+                    <>
+                      <RenderTabIcon name={route.name} isFocused={isFocused} />
+                      <Text style={styles.tabLabel}>{options.title}</Text>
+                    </>
                   )}
                 </Pressable>
               );
@@ -78,25 +81,24 @@ export default function TabsLayout() {
 
 function RenderTabIcon({ name, isFocused }: { name: string; isFocused: boolean }) {
   const iconColor = isFocused ? colors.secondary : colors.white;
-  const iconSize = 20;
+  const iconSize = 22;
 
-  if (name === 'index') {
-    return <Ionicons name='home' size={iconSize} color={iconColor} />;
+  switch (name) {
+    case 'index':
+      return <Ionicons name={isFocused ? 'wallet' : 'wallet-outline'} size={iconSize} color={iconColor} />;
+
+    case 'transactions':
+      return <Ionicons name={isFocused ? 'receipt' : 'receipt-outline'} size={iconSize} color={iconColor} />;
+
+    case 'identity':
+      return <Ionicons name={isFocused ? 'shield-checkmark' : 'shield-checkmark-outline'} size={iconSize} color={iconColor} />;
+
+    case 'settings':
+      return <Ionicons name={isFocused ? 'settings' : 'settings-outline'} size={iconSize} color={iconColor} />;
+
+    default:
+      return null;
   }
-
-  if (name === 'transactions') {
-    return <Ionicons name='book' size={iconSize} color={iconColor} />;
-  }
-
-  if (name === 'identity') {
-    return <Ionicons name='star' size={iconSize} color={iconColor} />;
-  }
-
-  if (name === 'settings') {
-    return <Ionicons name='settings' size={iconSize} color={iconColor} />;
-  }
-
-  return null;
 }
 
 const styles = StyleSheet.create({
@@ -138,11 +140,26 @@ const styles = StyleSheet.create({
     height: '100%'
   },
   centerActiveContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 16, // Smooth squircle matching reference image
+    width: 54,
+    height: 54,
+    borderRadius: 18, // Smooth squircle button
     backgroundColor: colors.secondary, // #05DA93
     alignItems: 'center',
-    justifyContent: 'center'
+    justifyContent: 'center',
+    marginTop: -22, // Raised slightly higher above the tab bar line
+    shadowColor: colors.secondary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.65,
+    shadowRadius: 14,
+    elevation: 10,
+    ...(Platform.OS === 'web' && {
+      boxShadow: `0px 6px 20px ${colors.secondary}99`
+    })
+  },
+  tabLabel: {
+    color: colors.white, // #FFFFFF
+    fontSize: 11,
+    fontFamily: 'Rajdhani_600SemiBold',
+    marginTop: 4
   }
 });
