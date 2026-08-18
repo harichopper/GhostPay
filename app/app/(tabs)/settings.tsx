@@ -480,7 +480,7 @@ export default function SettingsScreen() {
 
           {/* App Version Tag */}
           <View style={styles.versionFooter}>
-            <Text style={styles.versionText}>GhostPay v1.0.4 • Algorand Testnet</Text>
+            <Text style={styles.versionText}>GhostPay v1.0.5 • Algorand Testnet</Text>
           </View>
         </ScrollView>
       </LinearGradient>
