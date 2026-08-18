@@ -29,7 +29,6 @@ const styles = StyleSheet.create({
     padding: 24,
     marginBottom: 88, // Space above bottom navigation bar
     elevation: 6,
-    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 10
@@ -45,7 +44,7 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   subtitle: {
-    color: colors.accent, // #20639B Blue text
+    color: colors.primaryDark,
     fontSize: 14,
     fontFamily: 'Rajdhani_500Medium',
     textAlign: 'center'

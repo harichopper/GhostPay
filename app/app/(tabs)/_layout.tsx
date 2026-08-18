@@ -107,24 +107,24 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
     justifyContent: 'flex-end',
-    backgroundColor: colors.primaryDark, // #172B3E
+    backgroundColor: 'transparent',
     zIndex: 9999
   },
   tabBarContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.primaryDark, // #172B3E
+    backgroundColor: '#172B3E',
     width: '100%',
     height: 72,
     borderRadius: 0, // Flat top and flat edges
     paddingHorizontal: 16,
     borderWidth: 0,
-    elevation: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10
+    elevation: 0,
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0
   },
   desktopTabBar: {
     maxWidth: 480,
