@@ -13,7 +13,9 @@ import {
   View
 } from 'react-native';
 import Toast from 'react-native-toast-message';
+import TransactionDetailModal from '../../src/components/TransactionDetailModal';
 import { colors } from '../../src/theme/colors';
+import { GhostTransaction } from '../../src/types/transaction';
 
 interface NotificationItem {
   id: string;
@@ -88,6 +90,25 @@ export default function NotificationsScreen() {
   });
 
   const unreadCount = notifications.filter((n) => n.isUnread).length;
+
+  const [selectedTx, setSelectedTx] = useState<GhostTransaction | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleItemPress = (item: NotificationItem) => {
+    handleToggleRead(item.id);
+    if (item.type === 'payment' || item.type === 'system') {
+      setSelectedTx({
+        id: item.id,
+        sender: 'GBRNCKUL...CCB2',
+        receiver: 'EVA2874...99A1',
+        amount: 450.0,
+        timestamp: 'Tuesday, Feb 3, 2026 • 11:32 PM',
+        status: 'confirmed',
+        txHash: '6e268a9b1c0d4fe2'
+      });
+      setIsModalOpen(true);
+    }
+  };
 
   const handleMarkAllRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isUnread: false })));
@@ -186,7 +207,7 @@ export default function NotificationsScreen() {
                 <View key={item.id}>
                   <Pressable
                     style={[styles.notifCard, item.isUnread && styles.notifCardUnread]}
-                    onPress={() => handleToggleRead(item.id)}
+                    onPress={() => handleItemPress(item)}
                   >
                     <View style={[styles.iconCircle, { backgroundColor: item.iconBg }]}>
                       <Ionicons name={item.iconName} size={22} color={item.iconColor} />
@@ -215,6 +236,12 @@ export default function NotificationsScreen() {
           )}
         </ScrollView>
       </LinearGradient>
+
+      <TransactionDetailModal
+        visible={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        transaction={selectedTx}
+      />
     </SafeAreaView>
   );
 }

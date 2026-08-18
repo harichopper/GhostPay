@@ -15,8 +15,10 @@ import {
   View
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp, ZoomIn } from 'react-native-reanimated';
+import TransactionDetailModal from '../../src/components/TransactionDetailModal';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
+import { GhostTransaction } from '../../src/types/transaction';
 
 interface SampleTx {
   id: string;
@@ -121,6 +123,22 @@ export default function TransactionsScreen() {
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [selectedWalletLabel, setSelectedWalletLabel] = useState('•••• 2872');
   const [listKey, setListKey] = useState(0);
+
+  const [selectedTx, setSelectedTx] = useState<GhostTransaction | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleOpenDetail = (item: SampleTx) => {
+    setSelectedTx({
+      id: item.id,
+      sender: item.isPositive ? 'GBRNCKUL...CCB2' : (walletAddress || 'GBRNCKUL...CCB2'),
+      receiver: item.isPositive ? (walletAddress || 'GBRNCKUL...CCB2') : 'GBRNCKUL...CCB2',
+      amount: parseFloat(item.amount.replace(/[^0-9.]/g, '')) || 50,
+      timestamp: item.dateGroup === 'Today' ? 'Tuesday, Feb 3, 2026 • 11:32 PM' : 'Nov 19, 2025 • 4:15 PM',
+      status: 'confirmed',
+      txHash: '6e268a9b1c0d4fe2'
+    });
+    setIsModalOpen(true);
+  };
 
   // Refresh list animation when tab comes into focus
   useFocusEffect(
@@ -262,48 +280,55 @@ export default function TransactionsScreen() {
                     <Animated.View
                       key={item.id}
                       entering={FadeInDown.delay(220 + currentIndex * 70).duration(450).springify().damping(15)}
-                      style={styles.txCard}
                     >
-                      {/* Avatar / Brand Badge */}
-                      <View style={[styles.avatarContainer, { backgroundColor: item.iconBg }]}>
-                        {item.iconName ? (
-                          <Ionicons name={item.iconName} size={20} color={colors.white} />
-                        ) : (
-                          <Text style={styles.avatarText}>{item.iconText}</Text>
-                        )}
-                      </View>
-
-                      {/* Details */}
-                      <View style={styles.txDetails}>
-                        <Text style={styles.txName}>{item.name}</Text>
-                        <View style={styles.txStatusRow}>
-                          <Text style={styles.txType}>{item.type}</Text>
-                          <Ionicons
-                            name={item.type === 'Received' ? 'checkmark-circle' : 'time-outline'}
-                            size={14}
-                            color="#667085"
-                            style={{ marginLeft: 4 }}
-                          />
+                      <Pressable style={styles.txCard} onPress={() => handleOpenDetail(item)}>
+                        {/* Avatar / Brand Badge */}
+                        <View style={[styles.avatarContainer, { backgroundColor: item.iconBg }]}>
+                          {item.iconName ? (
+                            <Ionicons name={item.iconName} size={20} color={colors.white} />
+                          ) : (
+                            <Text style={styles.avatarText}>{item.iconText}</Text>
+                          )}
                         </View>
-                      </View>
 
-                      {/* Amount */}
-                      <Text
-                        style={[
-                          styles.txAmount,
-                          item.isPositive ? styles.amountPositive : styles.amountNegative
-                        ]}
-                      >
-                        {item.amount}
-                      </Text>
+                        {/* Details */}
+                        <View style={styles.txDetails}>
+                          <Text style={styles.txName}>{item.name}</Text>
+                          <View style={styles.txStatusRow}>
+                            <Text style={styles.txType}>{item.type}</Text>
+                            <Ionicons
+                              name={item.type === 'Received' ? 'checkmark-circle' : 'time-outline'}
+                              size={14}
+                              color="#667085"
+                              style={{ marginLeft: 4 }}
+                            />
+                          </View>
+                        </View>
+
+                        {/* Amount */}
+                        <Text
+                          style={[
+                            styles.txAmount,
+                            item.isPositive ? styles.amountPositive : styles.amountNegative
+                          ]}
+                        >
+                          {item.amount}
+                        </Text>
+                      </Pressable>
                     </Animated.View>
                   );
                 })}
               </View>
-            ))
-          )}
+            )))
+          }
         </ScrollView>
       </LinearGradient>
+
+      <TransactionDetailModal
+        visible={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        transaction={selectedTx}
+      />
     </SafeAreaView>
   );
 }

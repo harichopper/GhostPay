@@ -18,8 +18,10 @@ import {
 } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
+import TransactionDetailModal from '../../src/components/TransactionDetailModal';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
+import { GhostTransaction } from '../../src/types/transaction';
 
 // Smooth Count-Up Animated Counter for Total Balance
 const AnimatedCounter = ({
@@ -84,6 +86,22 @@ export default function HomeScreen() {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const [selectedTx, setSelectedTx] = useState<GhostTransaction | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleOpenTxDetail = (name: string, amountNum: number, isPositive: boolean) => {
+    setSelectedTx({
+      id: 'tx-' + Date.now(),
+      sender: isPositive ? 'EVA2874...99A1' : (walletAddress || 'GBRNCKUL...CCB2'),
+      receiver: isPositive ? (walletAddress || 'GBRNCKUL...CCB2') : 'GBRNCKUL...CCB2',
+      amount: amountNum,
+      timestamp: 'Tuesday, Feb 3, 2026 • 11:32 PM',
+      status: 'confirmed',
+      txHash: '6e268a9b1c0d4fe2'
+    });
+    setIsModalOpen(true);
+  };
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -340,7 +358,7 @@ export default function HomeScreen() {
           {/* Recent Transactions List Preview */}
           <View>
             {/* Tx 1 */}
-            <View style={styles.txCard}>
+            <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Eva Novak', 450.0, true)}>
               <View style={[styles.avatarContainer, { backgroundColor: '#172B3E' }]}>
                 <Text style={styles.avatarText}>EN</Text>
               </View>
@@ -349,10 +367,10 @@ export default function HomeScreen() {
                 <Text style={styles.txType}>Received • Today, 2:45 PM</Text>
               </View>
               <Text style={[styles.txAmount, styles.amountPositive]}>+$450.00</Text>
-            </View>
+            </Pressable>
 
             {/* Tx 2 */}
-            <View style={styles.txCard}>
+            <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Binance Exchange', -820.0, false)}>
               <View style={[styles.avatarContainer, { backgroundColor: '#F0B90B' }]}>
                 <Ionicons name="logo-bitcoin" size={20} color={colors.white} />
               </View>
@@ -361,10 +379,10 @@ export default function HomeScreen() {
                 <Text style={styles.txType}>Sent • Yesterday, 6:12 PM</Text>
               </View>
               <Text style={[styles.txAmount, styles.amountNegative]}>-$820.00</Text>
-            </View>
+            </Pressable>
 
             {/* Tx 3 */}
-            <View style={styles.txCard}>
+            <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Multiplex Cinema', -124.55, false)}>
               <View style={[styles.avatarContainer, { backgroundColor: '#E50914' }]}>
                 <Ionicons name="film" size={20} color={colors.white} />
               </View>
@@ -373,10 +391,16 @@ export default function HomeScreen() {
                 <Text style={styles.txType}>Paid • 15 Aug, 9:30 PM</Text>
               </View>
               <Text style={[styles.txAmount, styles.amountNegative]}>-$124.55</Text>
-            </View>
+            </Pressable>
           </View>
         </ScrollView>
       </LinearGradient>
+
+      <TransactionDetailModal
+        visible={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        transaction={selectedTx}
+      />
 
       {/* Receive QR Modal */}
       <Modal
