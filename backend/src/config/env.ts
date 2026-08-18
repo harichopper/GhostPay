@@ -56,5 +56,6 @@ export const env = {
   maxAlgoPerTx: parsePositiveNumber(process.env.MAX_ALGO_PER_TX, 1000),
   confirmationRounds: parsePositiveNumber(process.env.CONFIRMATION_ROUNDS, 6),
   contractAppId: Number(process.env.GHOSTPAY_CONTRACT_APP_ID ?? 0),
-  enforceContract: process.env.ENFORCE_CONTRACT === 'true'
+  enforceContract: process.env.ENFORCE_CONTRACT === 'true',
+  requireIdentityForSend: process.env.REQUIRE_IDENTITY_FOR_SEND !== 'false'
 };
