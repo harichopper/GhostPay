@@ -293,7 +293,7 @@ export default function HomeScreen() {
               <View style={styles.scanIconBox}>
                 <Ionicons name="qr-code" size={22} color={colors.secondary} />
               </View>
-              <Text style={styles.scanPayText}>Scan & pay</Text>
+              <Text style={styles.scanPayText}>Scan & Pay</Text>
             </Pressable>
           </View>
 

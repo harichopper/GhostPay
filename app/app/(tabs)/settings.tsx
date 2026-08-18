@@ -44,7 +44,6 @@ export default function SettingsScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [ghostModeEnabled, setGhostModeEnabled] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [settingsKey, setSettingsKey] = useState(0);
 
   // PIN / Passcode Lock Modal States
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
@@ -134,13 +133,6 @@ export default function SettingsScreen() {
     setEnteredPin((prev) => prev.slice(0, -1));
   };
 
-  // Trigger smooth entrance animation every time tab is focused
-  useFocusEffect(
-    useCallback(() => {
-      setSettingsKey((prev) => prev + 1);
-    }, [])
-  );
-
   const formattedAddress = walletAddress
     ? `${walletAddress.slice(0, 8)}...${walletAddress.slice(-6)}`
     : '0xGhost...2872';
@@ -217,12 +209,11 @@ export default function SettingsScreen() {
         </View>
 
         <ScrollView
-          key={settingsKey}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
           {/* User Profile Card */}
-          <Animated.View entering={FadeInDown.duration(400).delay(60)} style={styles.profileCard}>
+          <View style={styles.profileCard}>
             <View style={styles.avatarWrapper}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>GP</Text>
@@ -241,10 +232,10 @@ export default function SettingsScreen() {
             <View style={styles.verifiedBadge}>
               <Ionicons name="shield-checkmark" size={18} color={colors.secondary} />
             </View>
-          </Animated.View>
+          </View>
 
           {/* Network & Offline Status Banner */}
-          <Animated.View entering={FadeInDown.duration(400).delay(120)} style={styles.statusCard}>
+          <View style={styles.statusCard}>
             <View style={styles.statusRow}>
               <View style={styles.statusLeft}>
                 <Ionicons
@@ -284,10 +275,10 @@ export default function SettingsScreen() {
                 </Text>
               </Pressable>
             )}
-          </Animated.View>
+          </View>
 
           {/* Group 1: Security & Privacy */}
-          <Animated.View entering={FadeInDown.duration(400).delay(180)} style={styles.sectionGroup}>
+          <View style={styles.sectionGroup}>
             <Text style={styles.groupHeaderTitle}>SECURITY & PRIVACY</Text>
 
             <View style={styles.settingsCard}>
@@ -417,10 +408,10 @@ export default function SettingsScreen() {
                 <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
               </Pressable>
             </View>
-          </Animated.View>
+          </View>
 
           {/* Group 2: Preferences */}
-          <Animated.View entering={FadeInDown.duration(400).delay(240)} style={styles.sectionGroup}>
+          <View style={styles.sectionGroup}>
             <Text style={styles.groupHeaderTitle}>PREFERENCES</Text>
 
             <View style={styles.settingsCard}>
@@ -454,10 +445,10 @@ export default function SettingsScreen() {
                 </View>
               </Pressable>
             </View>
-          </Animated.View>
+          </View>
 
           {/* Group 3: Support & Disconnect */}
-          <Animated.View entering={FadeInDown.duration(400).delay(300)} style={styles.sectionGroup}>
+          <View style={styles.sectionGroup}>
             <Text style={styles.groupHeaderTitle}>ABOUT & ACCOUNT</Text>
 
             <View style={styles.settingsCard}>
@@ -485,7 +476,7 @@ export default function SettingsScreen() {
                 <Ionicons name="chevron-forward" size={18} color="#D92D20" />
               </Pressable>
             </View>
-          </Animated.View>
+          </View>
 
           {/* App Version Tag */}
           <View style={styles.versionFooter}>
