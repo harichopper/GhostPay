@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  Image,
   Platform,
   Pressable,
   SafeAreaView,
@@ -219,13 +220,14 @@ export default function TransactionsScreen() {
           </View>
         )}
 
-        {/* Account / Mastercard Pill Indicator (Static - No Fade Animation) */}
+        {/* Account / Algorand Pill Indicator */}
         <View style={styles.pillWrapper}>
           <View style={styles.cardPill}>
-            <View style={styles.mastercardDots}>
-              <View style={[styles.dot, { backgroundColor: '#EB001B' }]} />
-              <View style={[styles.dot, { backgroundColor: '#F79E1B', marginLeft: -6 }]} />
-            </View>
+            <Image
+              source={require('../../assets/branding/algorand-logo.webp')}
+              style={styles.algorandPillLogo}
+              resizeMode="contain"
+            />
             <Text style={styles.cardPillText}>{displayWalletText}</Text>
             <Ionicons name="chevron-down" size={14} color="rgba(255, 255, 255, 0.7)" style={{ marginLeft: 4 }} />
           </View>
@@ -385,15 +387,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)'
   },
-  mastercardDots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 8
-  },
-  dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7
+  algorandPillLogo: {
+    width: 60,
+    height: 16,
+    tintColor: '#FFFFFF',
+    marginRight: 6
   },
   cardPillText: {
     color: colors.white,
