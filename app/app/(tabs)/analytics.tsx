@@ -84,7 +84,7 @@ export default function AnalyticsScreen() {
           contentContainerStyle={styles.scrollContent}
         >
           {/* Main Interactive Spending Bar Chart Card (Clean White) */}
-          <Animated.View entering={FadeInDown.duration(450).delay(60)} style={styles.spendingCardContainer}>
+          <View style={styles.spendingCardContainer}>
             <LinearGradient
               colors={['#FFFFFF', '#F5FAF7']}
               style={styles.spendingCard}
@@ -140,7 +140,7 @@ export default function AnalyticsScreen() {
                 })}
               </View>
             </LinearGradient>
-          </Animated.View>
+          </View>
 
           {/* Offline Vault vs On-Chain Breakdown */}
           <Animated.View entering={FadeInDown.duration(450).delay(120)} style={styles.sectionHeaderRow}>
