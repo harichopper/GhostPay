@@ -8,6 +8,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -20,7 +21,15 @@ import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
 
 // Smooth Count-Up Animated Counter for Total Balance
-const AnimatedCounter = ({ targetValue, isHidden }: { targetValue: number; isHidden: boolean }) => {
+const AnimatedCounter = ({
+  targetValue,
+  isHidden,
+  refreshKey = 0
+}: {
+  targetValue: number;
+  isHidden: boolean;
+  refreshKey?: number;
+}) => {
   const [displayValue, setDisplayValue] = useState(0);
 
   useFocusEffect(
@@ -49,7 +58,7 @@ const AnimatedCounter = ({ targetValue, isHidden }: { targetValue: number; isHid
       return () => {
         if (animationFrameId) cancelAnimationFrame(animationFrameId);
       };
-    }, [targetValue, isHidden])
+    }, [targetValue, isHidden, refreshKey])
   );
 
   if (isHidden) {
@@ -70,6 +79,16 @@ export default function HomeScreen() {
   const isOnline = isConnected && !demoMode?.simulateOffline;
   const [isBalanceHidden, setIsBalanceHidden] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+      setRefreshKey((prev) => prev + 1);
+    }, 1000);
+  }, []);
 
   const formattedAddress = walletAddress
     ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
@@ -152,6 +171,14 @@ export default function HomeScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primaryDark}
+              colors={[colors.secondary, colors.primaryDark]}
+            />
+          }
         >
           {/* Main Digital Card Display */}
           <View style={styles.digitalCardContainer}>
@@ -205,7 +232,7 @@ export default function HomeScreen() {
               {/* Balance Amount with Smooth Count-Up Animation */}
               <View style={styles.balanceContainer}>
                 <Text style={styles.balanceLabel}>TOTAL BALANCE</Text>
-                <AnimatedCounter targetValue={numericBalance} isHidden={isBalanceHidden} />
+                <AnimatedCounter targetValue={numericBalance} isHidden={isBalanceHidden} refreshKey={refreshKey} />
               </View>
 
               {/* Card Footer Row */}

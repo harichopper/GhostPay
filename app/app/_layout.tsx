@@ -111,7 +111,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name='(tabs)' />
-        <Stack.Screen name='identity' />
+        <Stack.Screen name='analytics' />
         <Stack.Screen name='settings' />
       </Stack>
       <StatusBar style='light' />
