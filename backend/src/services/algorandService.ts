@@ -266,17 +266,13 @@ export async function ensureAccountHasMintFunds(address: string): Promise<void> 
     return;
   }
 
-  if (!env.signerMnemonic) {
-    throw new Error('Mint top-up signer is missing. Configure ALGORAND_SENDER_MNEMONIC or pre-fund the wallet before minting.');
-  }
-
   const algod = getAlgodClient();
   let amountMicro = 0;
   try {
     const accountInfo = await algod.accountInformation(address).do() as { amount?: unknown };
     amountMicro = readNumericField(accountInfo.amount, 0);
   } catch {
-    // Brand-new accounts may not exist on chain yet; treat as 0 and pre-fund.
+    // Brand-new accounts may not exist on chain yet; treat as 0.
     amountMicro = 0;
   }
 
@@ -285,7 +281,17 @@ export async function ensureAccountHasMintFunds(address: string): Promise<void> 
   // Fresh wallets need enough ALGO for fee + min balance increases from asset creation.
   const minRequiredAlgo = 0.3;
   if (amountAlgo >= minRequiredAlgo) {
+    // Wallet has sufficient balance — no top-up needed.
     return;
+  }
+
+  // Wallet is under-funded. Require a server signer to top it up.
+  if (!env.signerMnemonic) {
+    throw new Error(
+      `Wallet balance too low to mint (${amountAlgo.toFixed(4)} ALGO). ` +
+      `Minimum required: ${minRequiredAlgo} ALGO. ` +
+      `Please fund your wallet from the Algorand testnet dispenser: https://bank.testnet.algorand.network`
+    );
   }
 
   const signer = algosdk.mnemonicToSecretKey(env.signerMnemonic);

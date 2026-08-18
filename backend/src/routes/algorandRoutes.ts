@@ -178,30 +178,32 @@ algorandRouter.post('/send', async (request, response) => {
       return;
     }
 
-    if (!isMongoConfigured()) {
-      response.status(503).json({
-        error: 'Mobile identity verification is unavailable. Configure MongoDB to enable linked-mobile transfers.'
-      });
-      return;
-    }
+    if (env.requireIdentityForSend) {
+      if (!isMongoConfigured()) {
+        response.status(503).json({
+          error: 'Mobile identity verification is unavailable. Configure MongoDB to enable linked-mobile transfers, or set REQUIRE_IDENTITY_FOR_SEND=false in .env for development.'
+        });
+        return;
+      }
 
-    const [senderIdentity, receiverIdentity] = await Promise.all([
-      getIdentityByWallet(sender),
-      getIdentityByWallet(receiver)
-    ]);
+      const [senderIdentity, receiverIdentity] = await Promise.all([
+        getIdentityByWallet(sender),
+        getIdentityByWallet(receiver)
+      ]);
 
-    if (!senderIdentity || !senderIdentity.verified) {
-      response.status(403).json({
-        error: 'Sender wallet is not linked to a verified mobile number. Link mobile identity before sending.'
-      });
-      return;
-    }
+      if (!senderIdentity || !senderIdentity.verified) {
+        response.status(403).json({
+          error: 'Sender wallet is not linked to a verified mobile number. Link mobile identity before sending.'
+        });
+        return;
+      }
 
-    if (!receiverIdentity || !receiverIdentity.verified) {
-      response.status(403).json({
-        error: 'Receiver wallet is not linked to a verified mobile number. Send only to linked mobile identities.'
-      });
-      return;
+      if (!receiverIdentity || !receiverIdentity.verified) {
+        response.status(403).json({
+          error: 'Receiver wallet is not linked to a verified mobile number. Send only to linked mobile identities.'
+        });
+        return;
+      }
     }
 
     const tx = await sendAlgoPayment({
