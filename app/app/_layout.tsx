@@ -10,9 +10,12 @@ import { Rajdhani_500Medium, Rajdhani_600SemiBold, Rajdhani_700Bold } from '@exp
 import NetInfo from '@react-native-community/netinfo';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+
+SplashScreen.preventAutoHideAsync().catch(() => {});
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast, { ToastConfigParams } from 'react-native-toast-message';
 import { useWalletStore } from '../src/store/walletStore';
@@ -73,10 +76,11 @@ export default function RootLayout() {
 
     const loaderTimer = setTimeout(() => {
       setIsAppLoading(false);
-    }, 1800);
+      void SplashScreen.hideAsync().catch(() => {});
+    }, 600);
 
     return () => clearTimeout(loaderTimer);
-  }, [hydrateSampleData, loadNetworkInfo]);
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -84,7 +88,7 @@ export default function RootLayout() {
     }, 15000);
 
     return () => clearInterval(timer);
-  }, [loadNetworkInfo]);
+  }, []);
 
   useEffect(() => {
     setIsClientMounted(true);
@@ -111,7 +115,17 @@ export default function RootLayout() {
   }, [setConnectionStatus, syncPendingTransactions]);
 
   if (!fontsLoaded) {
-    return null;
+    return (
+      <View style={splashStyles.fullScreenOverlay}>
+        <StatusBar style="light" />
+        <Image
+          source={require('../assets/branding/ghostpay-logo.png')}
+          style={splashStyles.logoImage}
+          resizeMode="contain"
+        />
+        <Text style={splashStyles.connectingTextFallback}>Connecting...</Text>
+      </View>
+    );
   }
 
   return (
@@ -120,21 +134,27 @@ export default function RootLayout() {
         <Stack.Screen name='(tabs)' />
         <Stack.Screen name='analytics' />
         <Stack.Screen name='settings' />
+        <Stack.Screen name='+not-found' />
       </Stack>
       <StatusBar style='light' />
       {Platform.OS !== 'web' || isClientMounted ? <Toast config={toastConfig} /> : null}
 
       {isAppLoading && (
-        <View style={splashStyles.fullScreenOverlay} pointerEvents="auto">
+        <Pressable
+          style={splashStyles.fullScreenOverlay}
+          onPress={() => {
+            setIsAppLoading(false);
+            void SplashScreen.hideAsync().catch(() => {});
+          }}
+        >
           <StatusBar style="light" />
-          <View style={splashStyles.logoOuterRing}>
-            <Image
-              source={require('../assets/branding/ghostpay-logo.png')}
-              style={splashStyles.logoImage}
-              resizeMode="contain"
-            />
-          </View>
-        </View>
+          <Image
+            source={require('../assets/branding/ghostpay-logo.png')}
+            style={splashStyles.logoImage}
+            resizeMode="contain"
+          />
+          <Text style={splashStyles.connectingText}>Connecting...</Text>
+        </Pressable>
       )}
     </SafeAreaProvider>
   );
@@ -202,18 +222,22 @@ const splashStyles = StyleSheet.create({
     zIndex: 99999,
     elevation: 99999
   },
-  logoOuterRing: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: 'rgba(5, 218, 147, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(5, 218, 147, 0.35)'
-  },
   logoImage: {
-    width: 48,
-    height: 48
+    width: 184,
+    height: 184
+  },
+  connectingTextFallback: {
+    color: '#05DA93',
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 18,
+    letterSpacing: 1.2
+  },
+  connectingText: {
+    color: '#05DA93',
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    marginTop: 18,
+    letterSpacing: 1.2
   }
 });
