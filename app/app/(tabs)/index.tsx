@@ -5,6 +5,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
   Image,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
@@ -13,7 +14,7 @@ import {
   Text,
   View
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
@@ -24,6 +25,7 @@ export default function HomeScreen() {
 
   const isOnline = isConnected && !demoMode?.simulateOffline;
   const [isBalanceHidden, setIsBalanceHidden] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [homeKey, setHomeKey] = useState(0);
 
   // Trigger entrance animations every time home screen is focused
@@ -118,6 +120,31 @@ export default function HomeScreen() {
         >
           {/* Main Digital Card Display */}
           <Animated.View entering={FadeInDown.duration(450).delay(60)} style={styles.digitalCardContainer}>
+            {/* Top Stacked Card Peeking Layer (Neon Mint #05DA93) */}
+            <LinearGradient
+              colors={['#05DA93', '#00B87A']}
+              style={styles.cardStackTopLayer}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            />
+
+            {/* Bottom Stacked Card Layer 1 (Furthest Gold/Yellow) */}
+            <LinearGradient
+              colors={['#FFE033', '#F79E1B']}
+              style={styles.cardStackBottomLayer1}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            />
+
+            {/* Bottom Stacked Card Layer 2 (Soft Yellow Accent) */}
+            <LinearGradient
+              colors={['#FFF066', '#FFC700']}
+              style={styles.cardStackBottomLayer2}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            />
+
+            {/* Main Front Digital Card */}
             <LinearGradient
               colors={['#172B3E', '#0D1E2F', '#172B3E']}
               style={styles.digitalCard}
@@ -128,7 +155,7 @@ export default function HomeScreen() {
               <View style={styles.cardTopRow}>
                 <View style={styles.cardBrandGroup}>
                   <Ionicons name="flash-sharp" size={18} color={colors.secondary} />
-                  <Text style={styles.cardBrandText}>GHOSTPAY PASS</Text>
+                  <Text style={styles.cardBrandText}>GHOSTPAY</Text>
                 </View>
 
                 <Pressable onPress={() => setIsBalanceHidden(!isBalanceHidden)}>
@@ -164,7 +191,32 @@ export default function HomeScreen() {
             </LinearGradient>
           </Animated.View>
 
-          {/* Quick Action Grid (Send, Favorites, Scan, History) */}
+          {/* Dual Promo Row (Pay Super-Fast & Scan & Pay) */}
+          <Animated.View entering={FadeInDown.duration(450).delay(150)} style={styles.dualPromoRow}>
+            {/* Left Card: Pay Super-Fast / Offline Vault */}
+            <Pressable style={styles.promoCardLeft} onPress={toggleDemoOffline}>
+              <View style={styles.promoIconWrapper}>
+                <Ionicons name="flash" size={18} color="#05DA93" />
+              </View>
+              <View style={styles.promoTextGroup}>
+                <Text style={styles.promoSubtext}>Pay super-fast!</Text>
+                <View style={styles.promoTitleRow}>
+                  <Text style={styles.promoMainTitle}>OFFLINE VAULT</Text>
+                  <Ionicons name="chevron-forward" size={13} color={colors.primaryDark} />
+                </View>
+              </View>
+            </Pressable>
+
+            {/* Right Card: Scan & Pay */}
+            <Pressable style={styles.promoCardRight} onPress={() => router.push('/send')}>
+              <View style={styles.scanIconBox}>
+                <Ionicons name="qr-code" size={22} color={colors.secondary} />
+              </View>
+              <Text style={styles.scanPayText}>Scan & pay</Text>
+            </Pressable>
+          </Animated.View>
+
+          {/* Quick Action Grid (Send, Receive, History, Others) */}
           <Animated.View entering={FadeInDown.duration(450).delay(120)} style={styles.actionGridContainer}>
             <Pressable style={styles.actionItem} onPress={() => router.push('/send')}>
               <View style={[styles.actionIconCircle, { backgroundColor: '#E4F2EB' }]}>
@@ -173,18 +225,11 @@ export default function HomeScreen() {
               <Text style={styles.actionItemText}>Send</Text>
             </Pressable>
 
-            <Pressable style={styles.actionItem} onPress={() => router.push('/identity')}>
+            <Pressable style={styles.actionItem} onPress={handleCopyAddress}>
               <View style={[styles.actionIconCircle, { backgroundColor: '#EBF4FE' }]}>
-                <Ionicons name="shield-checkmark" size={22} color="#2F80ED" />
+                <Ionicons name="arrow-down-circle" size={22} color="#2F80ED" />
               </View>
-              <Text style={styles.actionItemText}>Favorites</Text>
-            </Pressable>
-
-            <Pressable style={styles.actionItem} onPress={() => router.push('/send')}>
-              <View style={[styles.actionIconCircle, { backgroundColor: '#F0EBFB' }]}>
-                <Ionicons name="scan-sharp" size={22} color="#7F56D9" />
-              </View>
-              <Text style={styles.actionItemText}>Scan</Text>
+              <Text style={styles.actionItemText}>Receive</Text>
             </Pressable>
 
             <Pressable style={styles.actionItem} onPress={() => router.push('/transactions')}>
@@ -193,20 +238,32 @@ export default function HomeScreen() {
               </View>
               <Text style={styles.actionItemText}>History</Text>
             </Pressable>
+
+            <Pressable style={styles.actionItem} onPress={() => router.push('/settings')}>
+              <View style={[styles.actionIconCircle, { backgroundColor: '#F0EBFB' }]}>
+                <Ionicons name="apps" size={22} color="#7F56D9" />
+              </View>
+              <Text style={styles.actionItemText}>Others</Text>
+            </Pressable>
           </Animated.View>
 
-          {/* Quick Stats Pill Banner */}
-          <Animated.View entering={FadeInDown.duration(450).delay(180)} style={styles.bannerPillCard}>
-            <View style={styles.bannerLeft}>
-              <View style={styles.bannerBadge}>
-                <Ionicons name="trending-up" size={16} color="#12B76A" />
-              </View>
-              <View style={{ marginLeft: 10 }}>
-                <Text style={styles.bannerTitle}>Offline Vault Shield Active</Text>
-                <Text style={styles.bannerSubtitle}>Zero-latency payments without cellular data</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
+          {/* Dual Action Pill Bar: My QR Code | GHOST ID + Copy */}
+          <Animated.View entering={FadeInDown.duration(450).delay(180)} style={styles.idPillBar}>
+            {/* Left side: My QR code > */}
+            <Pressable style={styles.idPillLeft} onPress={() => setIsQrModalOpen(true)}>
+              <Ionicons name="qr-code-outline" size={17} color={colors.primaryDark} style={{ marginRight: 6 }} />
+              <Text style={styles.idPillLeftText}>My QR code</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.primaryDark} style={{ marginLeft: 2 }} />
+            </Pressable>
+
+            {/* Vertical Divider Line */}
+            <View style={styles.idPillDivider} />
+
+            {/* Right side: GHOST ID: ghostpay@algo + Copy */}
+            <Pressable style={styles.idPillRight} onPress={handleCopyAddress}>
+              <Text style={styles.idPillRightText}>GHOST ID: ghostpay@algo</Text>
+              <Ionicons name="copy-outline" size={15} color={colors.primaryDark} style={{ marginLeft: 6 }} />
+            </Pressable>
           </Animated.View>
 
           {/* Recent Activity Section Header */}
@@ -221,14 +278,14 @@ export default function HomeScreen() {
           <Animated.View entering={FadeInDown.duration(450).delay(300)}>
             {/* Tx 1 */}
             <View style={styles.txCard}>
-              <View style={[styles.avatarContainer, { backgroundColor: '#4A3E3D' }]}>
+              <View style={[styles.avatarContainer, { backgroundColor: '#172B3E' }]}>
                 <Text style={styles.avatarText}>EN</Text>
               </View>
               <View style={styles.txDetails}>
                 <Text style={styles.txName}>Eva Novak</Text>
-                <Text style={styles.txType}>Received</Text>
+                <Text style={styles.txType}>Received • Today, 2:45 PM</Text>
               </View>
-              <Text style={[styles.txAmount, styles.amountPositive]}>+$5,710.20</Text>
+              <Text style={[styles.txAmount, styles.amountPositive]}>+$450.00</Text>
             </View>
 
             {/* Tx 2 */}
@@ -237,10 +294,10 @@ export default function HomeScreen() {
                 <Ionicons name="logo-bitcoin" size={20} color={colors.white} />
               </View>
               <View style={styles.txDetails}>
-                <Text style={styles.txName}>Binance</Text>
-                <Text style={styles.txType}>Received</Text>
+                <Text style={styles.txName}>Binance Exchange</Text>
+                <Text style={styles.txType}>Sent • Yesterday, 6:12 PM</Text>
               </View>
-              <Text style={[styles.txAmount, styles.amountPositive]}>+$714.00</Text>
+              <Text style={[styles.txAmount, styles.amountNegative]}>-$820.00</Text>
             </View>
 
             {/* Tx 3 */}
@@ -249,14 +306,45 @@ export default function HomeScreen() {
                 <Ionicons name="film" size={20} color={colors.white} />
               </View>
               <View style={styles.txDetails}>
-                <Text style={styles.txName}>Multiplex</Text>
-                <Text style={styles.txType}>Paid</Text>
+                <Text style={styles.txName}>Multiplex Cinema</Text>
+                <Text style={styles.txType}>Paid • 15 Aug, 9:30 PM</Text>
               </View>
               <Text style={[styles.txAmount, styles.amountNegative]}>-$124.55</Text>
             </View>
           </Animated.View>
         </ScrollView>
       </LinearGradient>
+
+      {/* Receive QR Modal */}
+      <Modal
+        visible={isQrModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsQrModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View entering={ZoomIn.duration(350).springify()} style={styles.qrModalCard}>
+            <Pressable style={styles.modalCloseButton} onPress={() => setIsQrModalOpen(false)}>
+              <Ionicons name="close" size={20} color={colors.primaryDark} />
+            </Pressable>
+
+            <Text style={styles.modalTitle}>My QR Code</Text>
+            <Text style={styles.modalSub}>Scan QR code to transfer funds to this wallet</Text>
+
+            {/* Dummy QR Code Box */}
+            <View style={styles.qrBox}>
+              <Ionicons name="qr-code" size={150} color={colors.primaryDark} />
+            </View>
+
+            <Text style={styles.qrAddressText}>GHOST ID: ghostpay@algo</Text>
+
+            <Pressable style={styles.copyAddressButton} onPress={handleCopyAddress}>
+              <Ionicons name="copy-outline" size={18} color={colors.primaryDark} style={{ marginRight: 6 }} />
+              <Text style={styles.copyAddressButtonText}>Copy Wallet ID</Text>
+            </Pressable>
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -348,22 +436,69 @@ const styles = StyleSheet.create({
   },
   notifBadge: {
     position: 'absolute',
-    top: 9,
-    right: 10,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: '#F04438'
+    top: 8,
+    right: 8,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: '#F04438',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    elevation: 3,
+    shadowColor: '#F04438',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.6,
+    shadowRadius: 3
   },
   scrollContent: {
     paddingHorizontal: 20,
     paddingBottom: 24
   },
   digitalCardContainer: {
-    marginTop: 8,
-    marginBottom: 20
+    marginTop: 16,
+    marginBottom: 24,
+    position: 'relative',
+    alignItems: 'center'
+  },
+  cardStackTopLayer: {
+    position: 'absolute',
+    top: -10,
+    width: '84%',
+    height: 24,
+    borderRadius: 18,
+    opacity: 0.85,
+    elevation: 3,
+    shadowColor: '#05DA93',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8
+  },
+  cardStackBottomLayer1: {
+    position: 'absolute',
+    bottom: -15,
+    width: '74%',
+    height: 22,
+    borderRadius: 14,
+    opacity: 0.9,
+    elevation: 2,
+    shadowColor: '#F79E1B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8
+  },
+  cardStackBottomLayer2: {
+    position: 'absolute',
+    bottom: -8,
+    width: '85%',
+    height: 22,
+    borderRadius: 16,
+    opacity: 0.8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)'
   },
   digitalCard: {
+    width: '100%',
     borderRadius: 26,
     padding: 22,
     elevation: 8,
@@ -458,44 +593,122 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_600SemiBold'
   },
-  bannerPillCard: {
+  dualPromoRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    marginBottom: 24,
-    elevation: 3,
-    shadowColor: '#172B3E',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10
+    gap: 12,
+    marginBottom: 20
   },
-  bannerLeft: {
+  promoCardLeft: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(23, 43, 62, 0.12)',
+    elevation: 2,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6
+  },
+  promoIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#172B3E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8
+  },
+  promoTextGroup: {
     flex: 1
   },
-  bannerBadge: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#ECFDF3',
-    alignItems: 'center',
-    justifyContent: 'center'
+  promoSubtext: {
+    color: '#667085',
+    fontSize: 10,
+    fontFamily: 'Inter_500Medium'
   },
-  bannerTitle: {
+  promoTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  promoMainTitle: {
+    color: colors.primaryDark,
+    fontSize: 11,
+    fontFamily: 'Inter_700Bold',
+    marginRight: 2
+  },
+  promoCardRight: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#172B3E',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    elevation: 4,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8
+  },
+  scanIconBox: {
+    marginRight: 10
+  },
+  scanPayText: {
+    color: colors.white,
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold'
+  },
+  idPillBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E4F2EB',
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(5, 218, 147, 0.3)',
+    elevation: 2,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6
+  },
+  idPillLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingRight: 8
+  },
+  idPillLeftText: {
     color: colors.primaryDark,
     fontSize: 13,
-    fontFamily: 'Inter_700Bold'
+    fontFamily: 'Inter_600SemiBold'
   },
-  bannerSubtitle: {
-    color: '#667085',
-    fontSize: 11,
-    fontFamily: 'Inter_500Medium',
-    marginTop: 1
+  idPillDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: 'rgba(23, 43, 62, 0.15)',
+    marginHorizontal: 4
+  },
+  idPillRight: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 6
+  },
+  idPillRightText: {
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold'
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -573,6 +786,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24
   },
   receiveModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    position: 'relative',
+    elevation: 10
+  },
+  qrModalCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 28,
     padding: 24,
