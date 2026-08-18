@@ -1,61 +1,148 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { Platform, Text, useWindowDimensions } from 'react-native';
+import React from 'react';
+import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../src/theme/colors';
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const hideTabBar = Platform.OS === 'web' && width >= 900;
+  const isDesktop = Platform.OS === 'web' && width > 768;
+
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'ios' ? 14 : 10);
 
   return (
     <Tabs
+      tabBar={({ state, descriptors, navigation }) => (
+        <View style={styles.tabBarWrapper}>
+          <View
+            style={[
+              styles.tabBarContainer,
+              { paddingBottom: bottomPadding },
+              isDesktop && styles.desktopTabBar
+            ]}
+          >
+            {state.routes.map((route, index) => {
+              const { options } = descriptors[route.key];
+              const isFocused = state.index === index;
+
+              const onPress = () => {
+                const event = navigation.emit({
+                  type: 'tabPress',
+                  target: route.key,
+                  canPreventDefault: true
+                });
+
+                if (!isFocused && !event.defaultPrevented) {
+                  navigation.navigate(route.name);
+                }
+              };
+
+              const isCenter = index === 2 || route.name === 'send';
+
+              return (
+                <Pressable
+                  key={route.key}
+                  onPress={onPress}
+                  style={styles.tabButton}
+                  accessibilityRole='button'
+                  accessibilityState={isFocused ? { selected: true } : {}}
+                  accessibilityLabel={options.title}
+                >
+                  {isCenter ? (
+                    <View style={styles.centerActiveContainer}>
+                      <Ionicons name='scan-outline' size={24} color={colors.primaryDark} />
+                    </View>
+                  ) : (
+                    <RenderTabIcon name={route.name} isFocused={isFocused} />
+                  )}
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
       screenOptions={{
-        headerShown: false,
-        tabBarStyle: hideTabBar
-          ? {
-              display: 'none'
-            }
-          : {
-              backgroundColor: '#08111F',
-              borderTopColor: 'rgba(132, 255, 245, 0.24)',
-              height: 66,
-              paddingTop: 8
-            },
-        tabBarActiveTintColor: colors.accent,
-        tabBarInactiveTintColor: '#7A8EA8',
-        tabBarLabelStyle: {
-          fontFamily: 'Rajdhani_700Bold',
-          fontSize: 13,
-          letterSpacing: 0.5
-        }
+        headerShown: false
       }}
     >
-      <Tabs.Screen
-        name='index'
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <TabEmoji color={color} emoji='🏠' />
-        }}
-      />
-      <Tabs.Screen
-        name='send'
-        options={{
-          title: 'Send',
-          tabBarIcon: ({ color }) => <TabEmoji color={color} emoji='⚡' />
-        }}
-      />
-      <Tabs.Screen
-        name='transactions'
-        options={{
-          title: 'Transactions',
-          tabBarIcon: ({ color }) => <TabEmoji color={color} emoji='⛓️' />
-        }}
-      />
+      <Tabs.Screen name='index' options={{ title: 'Home' }} />
+      <Tabs.Screen name='transactions' options={{ title: 'History' }} />
+      <Tabs.Screen name='send' options={{ title: 'Scan' }} />
+      <Tabs.Screen name='identity' options={{ title: 'Favorites' }} />
+      <Tabs.Screen name='settings' options={{ title: 'Settings' }} />
     </Tabs>
   );
 }
 
-function TabEmoji({ emoji, color }: { emoji: string; color: string }) {
-  return (
-    <Text style={{ color, fontSize: 15, marginBottom: 2 }}>{emoji}</Text>
-  );
+function RenderTabIcon({ name, isFocused }: { name: string; isFocused: boolean }) {
+  const iconColor = isFocused ? colors.secondary : colors.white;
+  const iconSize = 20;
+
+  if (name === 'index') {
+    return <Ionicons name='home' size={iconSize} color={iconColor} />;
+  }
+
+  if (name === 'transactions') {
+    return <Ionicons name='book' size={iconSize} color={iconColor} />;
+  }
+
+  if (name === 'identity') {
+    return <Ionicons name='star' size={iconSize} color={iconColor} />;
+  }
+
+  if (name === 'settings') {
+    return <Ionicons name='settings' size={iconSize} color={iconColor} />;
+  }
+
+  return null;
 }
+
+const styles = StyleSheet.create({
+  tabBarWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    backgroundColor: colors.primaryDark, // #172B3E
+    zIndex: 9999
+  },
+  tabBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.primaryDark, // #172B3E
+    width: '100%',
+    height: 72,
+    borderRadius: 0, // Flat top and flat edges
+    paddingHorizontal: 16,
+    borderWidth: 0,
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10
+  },
+  desktopTabBar: {
+    maxWidth: 480,
+    borderRadius: 16,
+    marginBottom: 16
+  },
+  tabButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%'
+  },
+  centerActiveContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 16, // Smooth squircle matching reference image
+    backgroundColor: colors.secondary, // #05DA93
+    alignItems: 'center',
+    justifyContent: 'center'
+  }
+});

@@ -1,25 +1,20 @@
 import React from 'react';
-import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { colors } from '../../src/theme/colors';
 
-export default function SendScreen() {
+export default function IdentityScreen() {
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-        <Text style={styles.title}>Send Screen Canvas</Text>
-        <Text style={styles.subtitle}>Ready for step-by-step UI design guidance</Text>
-      </View>
-    </SafeAreaView>
+    <View style={styles.container}>
+      <Text style={styles.title}>Identity Canvas</Text>
+      <Text style={styles.subtitle}>Ready for step-by-step UI design guidance</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background
-  },
   container: {
     flex: 1,
+    backgroundColor: colors.background,
     padding: 20,
     justifyContent: 'center',
     alignItems: 'center'
