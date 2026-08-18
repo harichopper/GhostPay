@@ -118,12 +118,12 @@ export default function TransactionsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [selectedWalletLabel, setSelectedWalletLabel] = useState('•••• 2872');
-  const [focusKey, setFocusKey] = useState(0);
+  const [listKey, setListKey] = useState(0);
 
-  // Trigger animations every time screen is focused (tab navigation)
+  // Refresh list animation when tab comes into focus
   useFocusEffect(
     useCallback(() => {
-      setFocusKey((prev) => prev + 1);
+      setListKey((prev) => prev + 1);
     }, [])
   );
 
@@ -178,14 +178,13 @@ export default function TransactionsScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <LinearGradient
-        key={focusKey}
         colors={['#FBFDFC', '#F0F7F3', '#E4F2EB']}
         style={styles.gradientContainer}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
-        {/* Header Bar */}
-        <Animated.View entering={FadeInDown.duration(400).delay(80)} style={styles.header}>
+        {/* Header Bar (Static - No Fade Animation) */}
+        <View style={styles.header}>
           <Pressable style={styles.iconButton} onPress={() => router.back()}>
             <Ionicons name="chevron-back" size={22} color={colors.primaryDark} />
           </Pressable>
@@ -198,11 +197,11 @@ export default function TransactionsScreen() {
           >
             <Ionicons name="search-outline" size={22} color={colors.primaryDark} />
           </Pressable>
-        </Animated.View>
+        </View>
 
-        {/* Search Bar Input (toggled on search press) */}
+        {/* Search Bar Input */}
         {isSearchVisible && (
-          <Animated.View entering={FadeInDown.duration(300)} style={styles.searchBarContainer}>
+          <View style={styles.searchBarContainer}>
             <Ionicons name="search" size={18} color={colors.primaryDark} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
@@ -217,11 +216,11 @@ export default function TransactionsScreen() {
                 <Ionicons name="close-circle" size={18} color={colors.primaryDark} />
               </Pressable>
             )}
-          </Animated.View>
+          </View>
         )}
 
-        {/* Account / Mastercard Pill Indicator */}
-        <Animated.View entering={ZoomIn.duration(400).delay(150)} style={styles.pillWrapper}>
+        {/* Account / Mastercard Pill Indicator (Static - No Fade Animation) */}
+        <View style={styles.pillWrapper}>
           <View style={styles.cardPill}>
             <View style={styles.mastercardDots}>
               <View style={[styles.dot, { backgroundColor: '#EB001B' }]} />
@@ -230,10 +229,11 @@ export default function TransactionsScreen() {
             <Text style={styles.cardPillText}>{displayWalletText}</Text>
             <Ionicons name="chevron-down" size={14} color="rgba(255, 255, 255, 0.7)" style={{ marginLeft: 4 }} />
           </View>
-        </Animated.View>
+        </View>
 
-        {/* Grouped Transaction List */}
+        {/* Grouped Transaction List (ONLY the list animates) */}
         <ScrollView
+          key={listKey}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >

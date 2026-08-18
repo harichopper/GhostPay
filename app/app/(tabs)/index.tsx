@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../../src/theme/colors';
@@ -5,13 +6,17 @@ import { colors } from '../../src/theme/colors';
 export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Home Content Card with #E0E3E7 Light Gray Background and Rounded Bottom Corners */}
-      <View style={styles.contentCard}>
+      <LinearGradient
+        colors={['#FBFDFC', '#F0F7F3', '#E4F2EB']}
+        style={styles.contentCard}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
         <View style={styles.headerArea}>
           <Text style={styles.title}>Home Screen</Text>
-          <Text style={styles.subtitle}>Light gray layout card with rounded bottom corners</Text>
+          <Text style={styles.subtitle}>Soft gradient layout card with rounded bottom corners</Text>
         </View>
-      </View>
+      </LinearGradient>
     </SafeAreaView>
   );
 }
@@ -23,11 +28,11 @@ const styles = StyleSheet.create({
   },
   contentCard: {
     flex: 1,
-    backgroundColor: colors.lightGray, // #E0E3E7 Light Gray card background
     borderBottomLeftRadius: 32, // Rounded bottom-left corner
     borderBottomRightRadius: 32, // Rounded bottom-right corner
     padding: 24,
     marginBottom: 88, // Space above bottom navigation bar
+    overflow: 'hidden',
     elevation: 6,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
