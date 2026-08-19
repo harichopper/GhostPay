@@ -1,0 +1,395 @@
+{
+  "info": {
+    "name": "GhostPay API",
+    "description": "Complete API collection for the GhostPay backend. Base URL: http://localhost:4000\n\nAccount routes require the x-api-key header if ACCOUNTS_API_KEY is set in .env.\nIdentity routes require MongoDB to be configured.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000",
+      "type": "string"
+    },
+    {
+      "key": "apiKey",
+      "value": "",
+      "type": "string",
+      "description": "Set to ACCOUNTS_API_KEY value from backend/.env (leave empty in dev)"
+    },
+    {
+      "key": "senderAddress",
+      "value": "EAUTOEMDXQ37NRPJPZZF6WJWT6LCCHXRQDQZRQXSZ4ZES4E5TM3HI",
+      "type": "string"
+    },
+    {
+      "key": "receiverAddress",
+      "value": "Q65TYCXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXR4P2KU",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Returns { ok: true } if the server is running."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Algorand",
+      "item": [
+        {
+          "name": "Get Network Info",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/algorand/network",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "algorand", "network"]
+            },
+            "description": "Returns current network (testnet/mainnet), explorer URL, demo mode flag, contract app ID, and server signer address."
+          }
+        },
+        {
+          "name": "Get Signer Address",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/algorand/signer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "algorand", "signer"]
+            },
+            "description": "Returns the Algorand address derived from ALGORAND_SENDER_MNEMONIC."
+          }
+        },
+        {
+          "name": "Get Balance",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/algorand/balance/{{senderAddress}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "algorand", "balance", "{{senderAddress}}"]
+            },
+            "description": "Returns the ALGO balance for the given Algorand address."
+          }
+        },
+        {
+          "name": "Get Balance — Invalid Address (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/algorand/balance/not-a-valid-address",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "algorand", "balance", "not-a-valid-address"]
+            },
+            "description": "Expects 400 — Invalid Algorand address."
+          }
+        },
+        {
+          "name": "Get Assets",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/algorand/assets/{{senderAddress}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "algorand", "assets", "{{senderAddress}}"]
+            },
+            "description": "Returns all ASA holdings + native ALGO balance for the given address."
+          }
+        },
+        {
+          "name": "Send — Demo Mode",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/algorand/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "algorand", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 0.01,\n  \"timestamp\": \"2026-08-19T19:00:00.000Z\",\n  \"demoMode\": true\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Simulates a confirmed transaction without hitting the chain. Returns a DEMO-prefixed txId. Requires ALLOW_DEMO_MODE=true in .env."
+          }
+        },
+        {
+          "name": "Send — Missing Fields (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/algorand/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "algorand", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"amount\": 0.01\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Expects 400 — receiver and timestamp are missing."
+          }
+        },
+        {
+          "name": "Send — Amount Too Large (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/algorand/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "algorand", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 999999,\n  \"timestamp\": \"2026-08-19T19:00:00.000Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Expects 400 — amount exceeds MAX_ALGO_PER_TX."
+          }
+        },
+        {
+          "name": "Send — Invalid Address (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/algorand/send",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "algorand", "send"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"bad-address\",\n  \"receiver\": \"also-bad\",\n  \"amount\": 0.01,\n  \"timestamp\": \"2026-08-19T19:00:00.000Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Expects 400 — Invalid Algorand sender or receiver address."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Identity (requires MongoDB)",
+      "item": [
+        {
+          "name": "Request Verification (OTP)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/identity/request-verification",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "identity", "request-verification"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobileNumber\": \"+12025550123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Generates an OTP for the given mobile number. With SMS_PROVIDER=none the OTP is returned in the response (REVEAL_OTP_IN_RESPONSE=true in dev)."
+          }
+        },
+        {
+          "name": "Send SMS OTP (alias)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/identity/send-sms-otp",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "identity", "send-sms-otp"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobileNumber\": \"+12025550123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Alias for request-verification. Same behaviour."
+          }
+        },
+        {
+          "name": "Verify Mobile & Link Wallet",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/identity/verify-mobile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "identity", "verify-mobile"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mobileNumber\": \"+12025550123\",\n  \"otpCode\": \"123456\",\n  \"walletAddress\": \"{{senderAddress}}\",\n  \"walletLabel\": \"My Wallet\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Submits the OTP received from request-verification. On success, links the wallet address to the verified mobile number."
+          }
+        },
+        {
+          "name": "Lookup Wallets by Mobile",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/identity/mobile/%2B12025550123/wallets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "identity", "mobile", "%2B12025550123", "wallets"]
+            },
+            "description": "Returns all wallets linked to the given mobile number. Mobile must be URL-encoded (+12025550123 → %2B12025550123)."
+          }
+        },
+        {
+          "name": "Lookup Identity by Wallet",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/identity/wallet/{{senderAddress}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "identity", "wallet", "{{senderAddress}}"]
+            },
+            "description": "Returns the identity record (mobile, verified flag) linked to the given wallet address."
+          }
+        },
+        {
+          "name": "Request Verification — Missing Body (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/identity/request-verification",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "identity", "request-verification"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Expects 400 — mobileNumber is required."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Accounts (requires MongoDB + API Key)",
+      "item": [
+        {
+          "name": "Create Account",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}", "description": "Leave empty if ACCOUNTS_API_KEY is not set" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "accounts"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+12025550123\",\n  \"walletId\": \"wallet-001\",\n  \"walletAddress\": \"{{senderAddress}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Creates a new phone ↔ walletId ↔ walletAddress mapping. Returns 409 if phone, walletId, or walletAddress already exists."
+          }
+        },
+        {
+          "name": "Get Account by Phone",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/phone/%2B12025550123",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "accounts", "phone", "%2B12025550123"]
+            },
+            "description": "Resolves an account by phone number. Phone must be URL-encoded."
+          }
+        },
+        {
+          "name": "Get Account by Wallet ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/wallet/wallet-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "accounts", "wallet", "wallet-001"]
+            },
+            "description": "Resolves an account by walletId."
+          }
+        },
+        {
+          "name": "Get Account by Phone — Not Found (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts/phone/%2B19999999999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "accounts", "phone", "%2B19999999999"]
+            },
+            "description": "Expects 404 — no account for this number."
+          }
+        },
+        {
+          "name": "Create Account — Duplicate (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{apiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/accounts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "accounts"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"+12025550123\",\n  \"walletId\": \"wallet-001\",\n  \"walletAddress\": \"{{senderAddress}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Run after Create Account. Expects 409 — ACCOUNT_EXISTS."
+          }
+        }
+      ]
+    }
+  ]
+}
