@@ -5,6 +5,12 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/app_logo/1024x1024.png",
+    "splash": {
+      "image": "./assets/app_logo/1024x1024.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -12,17 +18,27 @@
     "android": {
       "package": "com.ghostpay.wallet",
       "adaptiveIcon": {
-        "backgroundColor": "#05070B"
+        "foregroundImage": "./assets/app_logo/1024x1024.png",
+        "backgroundColor": "#000000"
       }
     },
     "web": {
       "bundler": "metro",
-      "output": "static"
+      "output": "static",
+      "favicon": "./assets/app_logo/32x32.png"
     },
     "plugins": [
       "expo-router",
       "expo-font",
       "expo-secure-store"
-    ]
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "06fa4427-049a-435d-8611-b9d57526432a"
+      }
+    }
   }
 }

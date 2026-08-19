@@ -4,13 +4,10 @@ import { env } from '../config/env.js';
 import { isMongoConfigured } from '../db/mongo.js';
 import { getIdentityByWallet } from '../services/identityService.js';
 import {
-  ensureAccountHasMintFunds,
   getAccountAssets,
   getAccountBalance,
   getNetworkInfo,
   getSignerAddress,
-  mintDemoAsset,
-  relaySignedTransaction,
   sendAlgoPayment
 } from '../services/algorandService.js';
 
@@ -21,22 +18,6 @@ function decimalPlaces(value: number): number {
   return split[1]?.length ?? 0;
 }
 
-function mintStatusCode(message: string): number {
-  const lower = message.toLowerCase();
-  if (
-    lower.includes('invalid')
-    || lower.includes('insufficient')
-    || lower.includes('overspend')
-    || lower.includes('missing')
-    || lower.includes('required')
-    || lower.includes('restricted')
-  ) {
-    return 400;
-  }
-
-  return 500;
-}
-
 algorandRouter.get('/network', (_request, response) => {
   response.json({
     ...getNetworkInfo(),
@@ -44,10 +25,56 @@ algorandRouter.get('/network', (_request, response) => {
   });
 });
 
+/**
+ * @openapi
+ * /api/algorand/signer:
+ *   get:
+ *     summary: Retrieve the backend signer account address
+ *     tags: [Algorand]
+ *     responses:
+ *       200:
+ *         description: Signer address retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 signerAddress:
+ *                   type: string
+ */
 algorandRouter.get('/signer', (_request, response) => {
   response.json({ signerAddress: getSignerAddress() });
 });
 
+/**
+ * @openapi
+ * /api/algorand/balance/{address}:
+ *   get:
+ *     summary: Retrieve the ALGO balance of a wallet address
+ *     tags: [Algorand]
+ *     parameters:
+ *       - in: path
+ *         name: address
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The Algorand address to query
+ *         example: "VMOY...ALGO...ADDR"
+ *     responses:
+ *       200:
+ *         description: Balance retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 balanceAlgo:
+ *                   type: number
+ *       400:
+ *         description: Invalid Algorand address
+ *       500:
+ *         description: Internal server error loading balance
+ */
 algorandRouter.get('/balance/:address', async (request, response) => {
   try {
     const { address } = request.params;
@@ -66,6 +93,37 @@ algorandRouter.get('/balance/:address', async (request, response) => {
   }
 });
 
+/**
+ * @openapi
+ * /api/algorand/assets/{address}:
+ *   get:
+ *     summary: Retrieve assets held by an Algorand address
+ *     tags: [Algorand]
+ *     parameters:
+ *       - in: path
+ *         name: address
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The Algorand address to query assets for
+ *         example: "VMOY...ALGO...ADDR"
+ *     responses:
+ *       200:
+ *         description: List of assets retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 assets:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Invalid Algorand address
+ *       500:
+ *         description: Internal server error loading assets
+ */
 algorandRouter.get('/assets/:address', async (request, response) => {
   try {
     const { address } = request.params;
@@ -80,59 +138,6 @@ algorandRouter.get('/assets/:address', async (request, response) => {
   } catch (error) {
     response.status(500).json({
       error: error instanceof Error ? error.message : 'Unable to load account assets'
-    });
-  }
-});
-
-algorandRouter.post('/mint', async (request, response) => {
-  try {
-    const { assetName, unitName, total, decimals, assetUrl, senderAddress, signedTxnBase64 } = request.body as {
-      assetName?: string;
-      unitName?: string;
-      total?: number;
-      decimals?: number;
-      assetUrl?: string;
-      senderAddress?: string;
-      signedTxnBase64?: string;
-    };
-
-    if (signedTxnBase64) {
-      if (!senderAddress || !algosdk.isValidAddress(senderAddress)) {
-        response.status(400).json({ error: 'Valid senderAddress is required when signedTxnBase64 is provided' });
-        return;
-      }
-
-      await ensureAccountHasMintFunds(senderAddress);
-
-      const relayed = await relaySignedTransaction({
-        signedTxnBase64,
-        expectedSender: senderAddress,
-        expectedType: algosdk.TransactionType.acfg
-      });
-
-      response.json({
-        txId: relayed.txId,
-        assetId: relayed.assetId,
-        creator: senderAddress,
-        explorerUrl: relayed.explorerUrl,
-        network: relayed.network
-      });
-      return;
-    }
-
-    const minted = await mintDemoAsset({
-      assetName,
-      unitName,
-      total,
-      decimals,
-      assetUrl
-    });
-
-    response.json(minted);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to mint asset token';
-    response.status(mintStatusCode(message)).json({
-      error: message
     });
   }
 });
@@ -178,30 +183,32 @@ algorandRouter.post('/send', async (request, response) => {
       return;
     }
 
-    if (!isMongoConfigured()) {
-      response.status(503).json({
-        error: 'Mobile identity verification is unavailable. Configure MongoDB to enable linked-mobile transfers.'
-      });
-      return;
-    }
+    if (env.requireIdentityForSend) {
+      if (!isMongoConfigured()) {
+        response.status(503).json({
+          error: 'Mobile identity verification is unavailable. Configure MongoDB to enable linked-mobile transfers, or set REQUIRE_IDENTITY_FOR_SEND=false in .env for development.'
+        });
+        return;
+      }
 
-    const [senderIdentity, receiverIdentity] = await Promise.all([
-      getIdentityByWallet(sender),
-      getIdentityByWallet(receiver)
-    ]);
+      const [senderIdentity, receiverIdentity] = await Promise.all([
+        getIdentityByWallet(sender),
+        getIdentityByWallet(receiver)
+      ]);
 
-    if (!senderIdentity || !senderIdentity.verified) {
-      response.status(403).json({
-        error: 'Sender wallet is not linked to a verified mobile number. Link mobile identity before sending.'
-      });
-      return;
-    }
+      if (!senderIdentity || !senderIdentity.verified) {
+        response.status(403).json({
+          error: 'Sender wallet is not linked to a verified mobile number. Link mobile identity before sending.'
+        });
+        return;
+      }
 
-    if (!receiverIdentity || !receiverIdentity.verified) {
-      response.status(403).json({
-        error: 'Receiver wallet is not linked to a verified mobile number. Send only to linked mobile identities.'
-      });
-      return;
+      if (!receiverIdentity || !receiverIdentity.verified) {
+        response.status(403).json({
+          error: 'Receiver wallet is not linked to a verified mobile number. Send only to linked mobile identities.'
+        });
+        return;
+      }
     }
 
     const tx = await sendAlgoPayment({

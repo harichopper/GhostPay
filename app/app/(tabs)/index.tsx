@@ -1,876 +1,986 @@
-import { MaterialIcons } from '@expo/vector-icons';
-import { Buffer } from 'buffer';
-import algosdk from 'algosdk';
-import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { useFocusEffect, useRouter } from 'expo-router';
+import React, { useCallback, useState } from 'react';
+import {
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View
+} from 'react-native';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
-import { AppChrome, CHROME_SIDEBAR_WIDTH, CHROME_TOP_HEIGHT } from '../../src/components/AppChrome';
-import { WalletQrModal } from '../../src/components/WalletQrModal';
-import { fetchAccountAssets, mintTestAsset } from '../../src/services/api';
-import { loadWalletSecretKey } from '../../src/storage/walletSecretStorage';
+import TransactionDetailModal from '../../src/components/TransactionDetailModal';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
-import type { AccountAsset, GhostTransaction } from '../../src/types/transaction';
-import { shortAddress } from '../../src/utils/format';
+import { GhostTransaction } from '../../src/types/transaction';
 
-const ALGONODE_MAINNET = 'https://mainnet-api.algonode.cloud';
-const ALGONODE_TESTNET = 'https://testnet-api.algonode.cloud';
+// Smooth Count-Up Animated Counter for Total Balance
+const AnimatedCounter = ({
+  targetValue,
+  isHidden,
+  refreshKey = 0
+}: {
+  targetValue: number;
+  isHidden: boolean;
+  refreshKey?: number;
+}) => {
+  const [displayValue, setDisplayValue] = useState(0);
 
-function getAlgodServer(network: 'testnet' | 'mainnet' | 'unknown'): string {
-  return network === 'mainnet' ? ALGONODE_MAINNET : ALGONODE_TESTNET;
-}
+  useFocusEffect(
+    useCallback(() => {
+      if (isHidden) return;
+      let animationFrameId: number;
+      const duration = 750;
+      const startTime = Date.now();
 
-function formatUsd(value: number): string {
-  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+      const animate = () => {
+        const now = Date.now();
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Cubic ease-out curve
+        const easeOut = 1 - Math.pow(1 - progress, 3);
+        const current = targetValue * easeOut;
+        setDisplayValue(current);
 
-function estimateAssetUsd(asset: AccountAsset): number | null {
-  if (asset.isAlgo) {
-    return asset.amount * 1.5;
-  }
+        if (progress < 1) {
+          animationFrameId = requestAnimationFrame(animate);
+        }
+      };
 
-  const symbol = asset.unitName.toUpperCase();
-  if (symbol === 'USDC' || symbol === 'USD') {
-    return asset.amount;
-  }
+      animationFrameId = requestAnimationFrame(animate);
 
-  return null;
-}
-
-function activityUi(tx: GhostTransaction, walletAddress: string) {
-  if (tx.status === 'confirmed') {
-    return {
-      title: 'Payment Confirmed',
-      icon: 'check',
-      iconColor: '#90D5B7',
-      amountColor: tx.sender === walletAddress ? '#FFB4AB' : '#90D5B7'
-    };
-  }
-
-  if (tx.status === 'pending' || tx.status === 'syncing') {
-    return {
-      title: 'Transaction Queued',
-      icon: 'schedule',
-      iconColor: '#00F5FF',
-      amountColor: '#00F5FF'
-    };
-  }
-
-  return {
-    title: 'Transaction Failed',
-    icon: 'close',
-    iconColor: '#FFB4AB',
-    amountColor: '#FFB4AB'
-  };
-}
-
-export default function HomeScreen() {
-  const { width } = useWindowDimensions();
-  const [qrVisible, setQrVisible] = useState(false);
-  const [showBalance, setShowBalance] = useState(true);
-  const [assetsLoading, setAssetsLoading] = useState(false);
-  const [minting, setMinting] = useState(false);
-  const [accountAssets, setAccountAssets] = useState<AccountAsset[]>([]);
-  const walletAddress = useWalletStore((state) => state.walletAddress);
-  const algorandNetwork = useWalletStore((state) => state.algorandNetwork);
-  const isConnected = useWalletStore((state) => state.isConnected);
-  const demoMode = useWalletStore((state) => state.demoMode);
-  const transactions = useWalletStore((state) => state.transactions);
-  const syncPendingTransactions = useWalletStore((state) => state.syncPendingTransactions);
-
-  const withSidebar = Platform.OS === 'web' && width >= 1024;
-  const isWide = width >= 1080;
-  const effectiveOnline = useMemo(() => isConnected && !demoMode.simulateOffline, [demoMode.simulateOffline, isConnected]);
-  const recentTransactions = useMemo(() => transactions.slice(0, 3), [transactions]);
-  const algoBalance = useMemo(() => accountAssets.find((asset) => asset.isAlgo)?.amount ?? 0, [accountAssets]);
-  const estimatedUsdTotal = useMemo(
-    () => accountAssets.reduce((sum, asset) => sum + (estimateAssetUsd(asset) ?? 0), 0),
-    [accountAssets]
+      return () => {
+        if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      };
+    }, [targetValue, isHidden, refreshKey])
   );
 
-  const loadAssets = useCallback(async () => {
-    if (!walletAddress) {
-      setAccountAssets([]);
-      return;
-    }
-
-    setAssetsLoading(true);
-    try {
-      const assets = await fetchAccountAssets(walletAddress);
-      setAccountAssets(assets);
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Asset refresh failed',
-        text2: error instanceof Error ? error.message : 'Unable to fetch assets for this wallet'
-      });
-    } finally {
-      setAssetsLoading(false);
-    }
-  }, [walletAddress]);
-
-  useEffect(() => {
-    void loadAssets();
-  }, [loadAssets]);
-
-  const handleMint = useCallback(async () => {
-    setMinting(true);
-    try {
-      const minted = await mintTestAsset({
-        assetName: 'GhostPay Token',
-        unitName: 'GHOST',
-        total: 1_000_000,
-        decimals: 2,
-        assetUrl: 'https://ghostpay.app/token',
-        senderAddress: walletAddress,
-        signedTxnBase64: await (async () => {
-          if (!walletAddress) {
-            throw new Error('Connect a wallet before minting');
-          }
-
-          const secretKey = await loadWalletSecretKey(walletAddress);
-          if (!secretKey) {
-            throw new Error('Local wallet key not found. Re-import or create wallet in Settings');
-          }
-
-          const localAddress = algosdk.encodeAddress(secretKey.slice(32));
-          if (localAddress !== walletAddress) {
-            throw new Error('Connected wallet does not match local signing key');
-          }
-
-          const algod = new algosdk.Algodv2('', getAlgodServer(algorandNetwork), '');
-          const params = await algod.getTransactionParams().do();
-          const networkFeeMicro = typeof params.fee === 'bigint' ? Number(params.fee) : Number(params.fee ?? 1_000);
-          const minFeeMicro = typeof params.minFee === 'bigint' ? Number(params.minFee) : Number(params.minFee ?? 1_000);
-          const txFeeMicro = Math.max(networkFeeMicro, minFeeMicro, 1_000);
-
-          const createTxn = algosdk.makeAssetCreateTxnWithSuggestedParamsFromObject({
-            sender: walletAddress,
-            total: BigInt(1_000_000),
-            decimals: 2,
-            defaultFrozen: false,
-            unitName: 'GHOST',
-            assetName: 'GhostPay Token',
-            assetURL: 'https://ghostpay.app/token',
-            manager: walletAddress,
-            reserve: walletAddress,
-            freeze: walletAddress,
-            clawback: walletAddress,
-            suggestedParams: {
-              ...params,
-              fee: BigInt(txFeeMicro),
-              flatFee: true
-            }
-          });
-
-          const signed = createTxn.signTxn(secretKey);
-          return Buffer.from(signed).toString('base64');
-        })()
-      });
-
-      Toast.show({
-        type: 'success',
-        text1: minted.assetId ? `Minted asset #${minted.assetId}` : 'Mint submitted',
-        text2: minted.assetId
-          ? (
-              minted.creator === walletAddress
-                ? 'Minted into your connected wallet'
-                : `Minted into wallet ${shortAddress(minted.creator, 6, 6)}`
-            )
-          : `Transaction submitted: ${shortAddress(minted.txId, 8, 6)}. Asset may appear after a short delay.`
-      });
-
-      await loadAssets();
-    } catch (error) {
-      Toast.show({
-        type: 'error',
-        text1: 'Mint failed',
-        text2: error instanceof Error ? error.message : 'Unable to mint test asset'
-      });
-    } finally {
-      setMinting(false);
-    }
-  }, [algorandNetwork, loadAssets, walletAddress]);
+  if (isHidden) {
+    return <Text style={styles.balanceAmountText}>$ • • • • •</Text>;
+  }
 
   return (
-    <LinearGradient colors={['#111417', '#121a21', '#111417']} style={styles.screen}>
-      <AppChrome activeSection='dashboard' />
+    <Text style={styles.balanceAmountText}>
+      ${displayValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+    </Text>
+  );
+};
 
-      <ScrollView contentContainerStyle={[styles.content, withSidebar && styles.contentWithSidebar]}>
-        <Animated.View entering={FadeInDown.duration(450).springify()}>
-          <View style={styles.headerRow}>
-            <View>
-              <Text style={styles.pageTitle}>Overview</Text>
-              <Text style={styles.pageSub}>Welcome back. Your vault is currently <Text style={styles.syncedText}>Synced</Text>.</Text>
-            </View>
+export default function HomeScreen() {
+  const router = useRouter();
+  const { walletAddress, balanceAlgo, transactions, isConnected, demoMode, toggleDemoOffline } = useWalletStore();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === 'web' && width > 768;
 
-            <View style={styles.feeCard}>
-              <MaterialIcons name='bolt' size={18} color='#E9FEFF' />
-              <View>
-                <Text style={styles.feeLabel}>Network Fee</Text>
-                <Text style={styles.feeValue}>0.0001 ALGO</Text>
-              </View>
+  const isOnline = isConnected && !demoMode?.simulateOffline;
+  const [isBalanceHidden, setIsBalanceHidden] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const [selectedTx, setSelectedTx] = useState<GhostTransaction | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handleOpenTxDetail = (name: string, amountNum: number, isPositive: boolean) => {
+    setSelectedTx({
+      id: 'tx-' + Date.now(),
+      sender: isPositive ? 'EVA2874...99A1' : (walletAddress || 'GBRNCKUL...CCB2'),
+      receiver: isPositive ? (walletAddress || 'GBRNCKUL...CCB2') : 'GBRNCKUL...CCB2',
+      amount: amountNum,
+      timestamp: 'Tuesday, Feb 3, 2026 • 11:32 PM',
+      status: 'confirmed',
+      txHash: '6e268a9b1c0d4fe2'
+    });
+    setIsModalOpen(true);
+  };
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => {
+      setRefreshing(false);
+      setRefreshKey((prev) => prev + 1);
+    }, 1000);
+  }, []);
+
+  const formattedAddress = walletAddress
+    ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
+    : '•••• 2872';
+
+  const numericBalance = balanceAlgo !== null ? balanceAlgo : 12480.50;
+
+  const handleCopyAddress = async () => {
+    if (walletAddress) {
+      await Clipboard.getStringAsync();
+      Toast.show({
+        type: 'success',
+        text1: 'Address Copied',
+        text2: 'Wallet address saved to clipboard'
+      });
+    } else {
+      Toast.show({
+        type: 'info',
+        text1: 'Address Copied',
+        text2: 'GhostPay Testnet Address Copied'
+      });
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <LinearGradient
+        colors={['#FBFDFC', '#F0F7F3', '#E4F2EB']}
+        style={[styles.gradientContainer, isDesktop && styles.gradientContainerDesktop]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        {/* Top Header Bar */}
+        <View style={styles.headerBar}>
+          <Pressable style={styles.userProfileGroup} onPress={() => router.push('/settings')}>
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarInitial}>GP</Text>
+              <View style={[styles.activeDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
             </View>
+            <View style={styles.greetingTextGroup}>
+              <Text style={styles.greetingSub}>Welcome back,</Text>
+              <Text style={styles.greetingTitle}>GhostPay User</Text>
+            </View>
+          </Pressable>
+
+          <View style={styles.headerActionsGroup}>
+            <Pressable
+              style={[styles.networkStatusPill, isOnline ? styles.onlinePill : styles.offlinePill]}
+              onPress={() => {
+                toggleDemoOffline();
+                Toast.show({
+                  type: 'info',
+                  text1: isOnline ? 'Offline Mode Active' : 'Online Mode Active',
+                  text2: isOnline ? 'Simulating zero-data vault payments' : 'Connected to Algorand Testnet'
+                });
+              }}
+            >
+              <Ionicons
+                name={isOnline ? 'globe-outline' : 'cloud-offline-outline'}
+                size={14}
+                color={isOnline ? '#027A48' : '#B54708'}
+                style={{ marginRight: 5 }}
+              />
+              <View style={[styles.networkDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
+              <Text style={[styles.networkStatusText, { color: isOnline ? '#027A48' : '#B54708' }]}>
+                {isOnline ? 'Online' : 'Offline'}
+              </Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.iconCircleButton}
+              onPress={() => router.push('/notification')}
+            >
+              <Ionicons name="notifications-outline" size={20} color={colors.primaryDark} />
+              <View style={styles.notifBadge} />
+            </Pressable>
           </View>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(90).duration(520).springify()}>
-          <View style={[styles.bentoRow, !isWide && styles.bentoRowStack]}>
-            <LinearGradient colors={['rgba(233,254,255,0.08)', 'rgba(0,220,229,0.03)']} style={[styles.heroCard, !isWide && styles.heroCardStack]}>
-              <View style={styles.heroGlow} />
-              <View style={styles.heroTopRow}>
-                <View>
-                  <Text style={styles.heroLabel}>Wallet Balance</Text>
-                  <Text style={styles.heroValue}>
-                    {showBalance ? `${algoBalance.toLocaleString('en-US', { maximumFractionDigits: 6 })} ALGO` : '••••••'}
-                  </Text>
-                  <Text style={styles.heroDelta}>{showBalance ? `Estimated ${formatUsd(estimatedUsdTotal)}` : 'Estimated ••••••'}</Text>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primaryDark}
+              colors={[colors.secondary, colors.primaryDark]}
+            />
+          }
+        >
+          {/* Main Digital Card Display */}
+          <View style={styles.digitalCardContainer}>
+            {/* Top Stacked Card Peeking Layer (Neon Mint #05DA93) */}
+            <LinearGradient
+              colors={['#05DA93', '#00B87A']}
+              style={styles.cardStackTopLayer}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            />
+
+            {/* Bottom Stacked Card Layer 1 (Furthest Gold/Yellow) */}
+            <LinearGradient
+              colors={['#FFE033', '#F79E1B']}
+              style={styles.cardStackBottomLayer1}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            />
+
+            {/* Bottom Stacked Card Layer 2 (Soft Yellow Accent) */}
+            <LinearGradient
+              colors={['#FFF066', '#FFC700']}
+              style={styles.cardStackBottomLayer2}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            />
+
+            {/* Main Front Digital Card */}
+            <LinearGradient
+              colors={['#172B3E', '#0D1E2F', '#172B3E']}
+              style={styles.digitalCard}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+            >
+              {/* Card Top Row */}
+              <View style={styles.cardTopRow}>
+                <View style={styles.cardBrandGroup}>
+                  <Ionicons name="flash-sharp" size={18} color={colors.secondary} />
+                  <Text style={styles.cardBrandText}>GHOSTPAY</Text>
                 </View>
-                <Pressable style={styles.heroEyeWrap} onPress={() => setShowBalance((prev) => !prev)}>
-                  <MaterialIcons name={showBalance ? 'visibility' : 'visibility-off'} size={18} color='#E9FEFF' />
+
+                <Pressable onPress={() => setIsBalanceHidden(!isBalanceHidden)}>
+                  <Ionicons
+                    name={isBalanceHidden ? 'eye-off-outline' : 'eye-outline'}
+                    size={20}
+                    color="rgba(255, 255, 255, 0.7)"
+                  />
                 </Pressable>
               </View>
 
-              <View style={styles.chainRow}>
-                <View style={styles.chainPillPrimary}>
-                  <View style={styles.chainDotPrimary} />
-                  <Text style={styles.chainPillPrimaryText}>Algorand</Text>
+              {/* Balance Amount with Smooth Count-Up Animation */}
+              <View style={styles.balanceContainer}>
+                <Text style={styles.balanceLabel}>TOTAL BALANCE</Text>
+                <AnimatedCounter targetValue={numericBalance} isHidden={isBalanceHidden} refreshKey={refreshKey} />
+              </View>
+
+              {/* Card Footer Row */}
+              <View style={styles.cardFooterRow}>
+                <View style={styles.cardAddressGroup}>
+                  <Text style={styles.cardAddressLabel}>ACCOUNT WALLET</Text>
+                  <Text style={styles.cardAddressValue}>{formattedAddress}</Text>
                 </View>
-                <View style={styles.chainPill}>
-                  <View style={styles.chainDotSecondary} />
-                  <Text style={styles.chainPillText}>USDC</Text>
-                </View>
+
+                <Image
+                  source={require('../../assets/branding/algorand-logo.webp')}
+                  style={styles.algorandWhiteLogo}
+                  resizeMode="contain"
+                />
               </View>
             </LinearGradient>
-
-            <View style={[styles.actionsColumn, !isWide && styles.actionsColumnStack]}>
-              <Pressable style={styles.actionCard} onPress={() => router.replace('/(tabs)/send')}>
-                <View style={styles.actionIconWrapPrimary}>
-                  <MaterialIcons name='send' size={20} color='#E9FEFF' />
-                </View>
-                <View style={styles.actionContent}>
-                  <Text style={styles.actionTitle}>Send</Text>
-                  <Text style={styles.actionSub}>Instant transfer</Text>
-                </View>
-                <MaterialIcons name='arrow-forward-ios' size={16} color='#B9CACA' />
-              </Pressable>
-
-              <Pressable style={styles.actionCard} onPress={() => setQrVisible(true)}>
-                <View style={styles.actionIconWrapSecondary}>
-                  <MaterialIcons name='call-received' size={20} color='#90D5B7' />
-                </View>
-                <View style={styles.actionContent}>
-                  <Text style={styles.actionTitle}>Receive</Text>
-                  <Text style={styles.actionSub}>Show QR code</Text>
-                </View>
-                <MaterialIcons name='arrow-forward-ios' size={16} color='#B9CACA' />
-              </Pressable>
-
-              <Pressable style={styles.actionCard} onPress={() => void syncPendingTransactions()}>
-                <View style={styles.actionIconWrapPrimary}>
-                  <MaterialIcons name='sync' size={20} color='#E9FEFF' />
-                </View>
-                <View style={styles.actionContent}>
-                  <Text style={styles.actionTitle}>Sync</Text>
-                  <Text style={styles.actionSub}>Refresh ledger</Text>
-                </View>
-                <MaterialIcons name='arrow-forward-ios' size={16} color='#B9CACA' />
-              </Pressable>
-            </View>
           </View>
-        </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(160).duration(560).springify()}>
-          <View style={[styles.lowerRow, !isWide && styles.lowerRowStack]}>
-            <View style={[styles.assetSection, !isWide && styles.assetSectionStack]}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Active Assets</Text>
-                <View style={styles.sectionActions}>
-                  <Pressable style={styles.sectionButton} onPress={() => void loadAssets()} disabled={assetsLoading}>
-                    <Text style={styles.sectionButtonText}>{assetsLoading ? 'Refreshing...' : 'Refresh'}</Text>
-                  </Pressable>
-                  <Pressable style={[styles.sectionButton, minting && styles.sectionButtonDisabled]} onPress={() => void handleMint()} disabled={minting}>
-                    <Text style={styles.sectionButtonText}>{minting ? 'Minting...' : 'Mint'}</Text>
-                  </Pressable>
+          {/* Dual Promo Row (Pay Super-Fast & Scan & Pay) */}
+          <View style={styles.dualPromoRow}>
+            {/* Left Card: Pay Super-Fast / Offline Vault */}
+            <Pressable style={styles.promoCardLeft} onPress={toggleDemoOffline}>
+              <View style={styles.promoIconWrapper}>
+                <Ionicons name="flash" size={18} color="#05DA93" />
+              </View>
+              <View style={styles.promoTextGroup}>
+                <Text style={styles.promoSubtext}>Pay super-fast!</Text>
+                <View style={styles.promoTitleRow}>
+                  <Text style={styles.promoMainTitle}>OFFLINE VAULT</Text>
+                  <Ionicons name="chevron-forward" size={13} color={colors.primaryDark} />
                 </View>
               </View>
+            </Pressable>
 
-              {accountAssets.length === 0 ? (
-                <View style={styles.assetCard}>
-                  <Text style={styles.noActivity}>No assets found for this wallet yet.</Text>
-                </View>
-              ) : (
-                accountAssets.map((asset) => {
-                  const estimatedUsd = estimateAssetUsd(asset);
-                  const unit = asset.unitName || `ASA-${asset.assetId}`;
-                  const icon = asset.isAlgo ? 'A' : (unit[0] || '$').toUpperCase();
-
-                  return (
-                    <View key={`${asset.assetId}-${unit}`} style={styles.assetCard}>
-                      <View style={styles.assetLeft}>
-                        <View style={styles.assetIconWrap}>
-                          <Text style={asset.isAlgo ? styles.assetIconA : styles.assetIconU}>{icon}</Text>
-                        </View>
-                        <View>
-                          <Text style={styles.assetName}>{asset.name}</Text>
-                          <Text style={styles.assetAmount}>{asset.amount.toLocaleString('en-US', { maximumFractionDigits: 6 })} {unit}</Text>
-                        </View>
-                      </View>
-                      <View style={styles.assetRight}>
-                        <Text style={styles.assetUsd}>{estimatedUsd === null ? 'N/A' : formatUsd(estimatedUsd)}</Text>
-                        <Text style={styles.assetStable}>{asset.isAlgo ? 'Layer-1' : `ID ${asset.assetId}`}</Text>
-                      </View>
-                    </View>
-                  );
-                })
-              )}
-            </View>
-
-            <View style={styles.activitySection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Recent Activity</Text>
-                <View style={styles.filterWrap}>
-                  <Text style={styles.filterPillActive}>All</Text>
-                  <Text style={styles.filterPill}>Pending</Text>
-                </View>
+            {/* Right Card: Scan & Pay */}
+            <Pressable style={styles.promoCardRight} onPress={() => router.push('/send')}>
+              <View style={styles.scanIconBox}>
+                <Ionicons name="qr-code" size={22} color={colors.secondary} />
               </View>
-
-              <View style={styles.activityList}>
-                {recentTransactions.length === 0 ? (
-                  <Text style={styles.noActivity}>No recent activity yet.</Text>
-                ) : (
-                  recentTransactions.map((item) => {
-                    const meta = activityUi(item, walletAddress);
-                    const amountLabel = `${item.sender === walletAddress ? '-' : '+'} ${item.amount.toFixed(3)} ALGO`;
-
-                    return (
-                      <View key={item.id} style={styles.activityItemRow}>
-                        <View style={styles.timelineCol}>
-                          <View style={[styles.timelineIcon, { borderColor: `${meta.iconColor}55` }]}>
-                            <MaterialIcons name={meta.icon as keyof typeof MaterialIcons.glyphMap} size={15} color={meta.iconColor} />
-                          </View>
-                          <View style={styles.timelineLine} />
-                        </View>
-
-                        <View style={styles.activityCard}>
-                          <View style={styles.activityTopLine}>
-                            <View>
-                              <Text style={styles.activityTitle}>{meta.title}</Text>
-                              <Text style={styles.activityTo}>To: {shortAddress(item.receiver, 4, 4)}</Text>
-                            </View>
-                            <Text style={[styles.activityAmount, { color: meta.amountColor }]}>{amountLabel}</Text>
-                          </View>
-
-                          <View style={styles.activityBottomLine}>
-                            <Text style={styles.activityTime}>{new Date(item.timestamp).toLocaleString()}</Text>
-                            <Text style={styles.activityBadge}>{item.status.toUpperCase()}</Text>
-                          </View>
-                        </View>
-                      </View>
-                    );
-                  })
-                )}
-              </View>
-            </View>
+              <Text style={styles.scanPayText}>Scan & Pay</Text>
+            </Pressable>
           </View>
-        </Animated.View>
 
-        <View style={styles.networkFooter}>
-          <Text style={styles.networkFooterText}>Network: {algorandNetwork.toUpperCase()}</Text>
-          <Text style={[styles.networkStatus, effectiveOnline ? styles.online : styles.offline]}>
-            {effectiveOnline ? 'ONLINE: auto-sync armed' : 'OFFLINE: queue mode active'}
-          </Text>
+          {/* Quick Action Grid (Send, Receive, History, Others) */}
+          <View style={styles.actionGridContainer}>
+            <Pressable style={styles.actionItem} onPress={() => router.push('/send')}>
+              <View style={[styles.actionIconCircle, { backgroundColor: '#E4F2EB' }]}>
+                <Ionicons name="paper-plane" size={22} color={colors.primaryDark} />
+              </View>
+              <Text style={styles.actionItemText}>Send</Text>
+            </Pressable>
+
+            <Pressable style={styles.actionItem} onPress={handleCopyAddress}>
+              <View style={[styles.actionIconCircle, { backgroundColor: '#EBF4FE' }]}>
+                <Ionicons name="arrow-down-circle" size={22} color="#2F80ED" />
+              </View>
+              <Text style={styles.actionItemText}>Receive</Text>
+            </Pressable>
+
+            <Pressable style={styles.actionItem} onPress={() => router.push('/transactions')}>
+              <View style={[styles.actionIconCircle, { backgroundColor: '#FEF0C7' }]}>
+                <Ionicons name="receipt" size={22} color="#DC6803" />
+              </View>
+              <Text style={styles.actionItemText}>History</Text>
+            </Pressable>
+
+            <Pressable style={styles.actionItem} onPress={() => router.push('/settings')}>
+              <View style={[styles.actionIconCircle, { backgroundColor: '#F0EBFB' }]}>
+                <Ionicons name="apps" size={22} color="#7F56D9" />
+              </View>
+              <Text style={styles.actionItemText}>Others</Text>
+            </Pressable>
+          </View>
+
+          {/* Dual Action Pill Bar: My QR Code | GHOST ID + Copy */}
+          <View style={styles.idPillBar}>
+            {/* Left side: My QR code > */}
+            <Pressable style={styles.idPillLeft} onPress={() => setIsQrModalOpen(true)}>
+              <Ionicons name="qr-code-outline" size={17} color={colors.primaryDark} style={{ marginRight: 6 }} />
+              <Text style={styles.idPillLeftText}>My QR code</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.primaryDark} style={{ marginLeft: 2 }} />
+            </Pressable>
+
+            {/* Vertical Divider Line */}
+            <View style={styles.idPillDivider} />
+
+            {/* Right side: GHOST ID: ghostpay@algo + Copy */}
+            <Pressable style={styles.idPillRight} onPress={handleCopyAddress}>
+              <Text style={styles.idPillRightText}>GHOST ID: ghostpay@algo</Text>
+              <Ionicons name="copy-outline" size={15} color={colors.primaryDark} style={{ marginLeft: 6 }} />
+            </Pressable>
+          </View>
+
+          {/* Recent Activity Section Header */}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeaderTitle}>Recent Activity</Text>
+            <Pressable onPress={() => router.push('/transactions')}>
+              <Text style={styles.seeAllLinkText}>See All</Text>
+            </Pressable>
+          </View>
+
+          {/* Recent Transactions List Preview */}
+          <View>
+            {/* Tx 1 */}
+            <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Eva Novak', 450.0, true)}>
+              <View style={[styles.avatarContainer, { backgroundColor: '#172B3E' }]}>
+                <Text style={styles.avatarText}>EN</Text>
+              </View>
+              <View style={styles.txDetails}>
+                <Text style={styles.txName}>Eva Novak</Text>
+                <Text style={styles.txType}>Received • Today, 2:45 PM</Text>
+              </View>
+              <Text style={[styles.txAmount, styles.amountPositive]}>+$450.00</Text>
+            </Pressable>
+
+            {/* Tx 2 */}
+            <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Binance Exchange', -820.0, false)}>
+              <View style={[styles.avatarContainer, { backgroundColor: '#F0B90B' }]}>
+                <Ionicons name="logo-bitcoin" size={20} color={colors.white} />
+              </View>
+              <View style={styles.txDetails}>
+                <Text style={styles.txName}>Binance Exchange</Text>
+                <Text style={styles.txType}>Sent • Yesterday, 6:12 PM</Text>
+              </View>
+              <Text style={[styles.txAmount, styles.amountNegative]}>-$820.00</Text>
+            </Pressable>
+
+            {/* Tx 3 */}
+            <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Multiplex Cinema', -124.55, false)}>
+              <View style={[styles.avatarContainer, { backgroundColor: '#E50914' }]}>
+                <Ionicons name="film" size={20} color={colors.white} />
+              </View>
+              <View style={styles.txDetails}>
+                <Text style={styles.txName}>Multiplex Cinema</Text>
+                <Text style={styles.txType}>Paid • 15 Aug, 9:30 PM</Text>
+              </View>
+              <Text style={[styles.txAmount, styles.amountNegative]}>-$124.55</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </LinearGradient>
+
+      <TransactionDetailModal
+        visible={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        transaction={selectedTx}
+      />
+
+      {/* Receive QR Modal */}
+      <Modal
+        visible={isQrModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsQrModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View entering={ZoomIn.duration(350).springify()} style={styles.qrModalCard}>
+            <Pressable style={styles.modalCloseButton} onPress={() => setIsQrModalOpen(false)}>
+              <Ionicons name="close" size={20} color={colors.primaryDark} />
+            </Pressable>
+
+            <Text style={styles.modalTitle}>My QR Code</Text>
+            <Text style={styles.modalSub}>Scan QR code to transfer funds to this wallet</Text>
+
+            {/* Dummy QR Code Box */}
+            <View style={styles.qrBox}>
+              <Ionicons name="qr-code" size={150} color={colors.primaryDark} />
+            </View>
+
+            <Text style={styles.qrAddressText}>GHOST ID: ghostpay@algo</Text>
+
+            <Pressable style={styles.copyAddressButton} onPress={handleCopyAddress}>
+              <Ionicons name="copy-outline" size={18} color={colors.primaryDark} style={{ marginRight: 6 }} />
+              <Text style={styles.copyAddressButtonText}>Copy Wallet ID</Text>
+            </Pressable>
+          </Animated.View>
         </View>
-      </ScrollView>
-
-      <WalletQrModal visible={qrVisible} walletAddress={walletAddress} onClose={() => setQrVisible(false)} />
-    </LinearGradient>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1
-  },
-  content: {
-    paddingTop: CHROME_TOP_HEIGHT + 16,
-    paddingHorizontal: 24,
-    paddingBottom: 120,
-    gap: 24
-  },
-  contentWithSidebar: {
-    paddingLeft: CHROME_SIDEBAR_WIDTH + 24
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 14,
-    flexWrap: 'wrap'
-  },
-  pageTitle: {
-    color: '#E9FEFF',
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 40,
-    letterSpacing: -0.5
-  },
-  pageSub: {
-    marginTop: 6,
-    color: '#B9CACA',
-    fontFamily: 'Rajdhani_500Medium',
-    fontSize: 16
-  },
-  syncedText: {
-    color: '#90D5B7',
-    fontFamily: 'Rajdhani_700Bold'
-  },
-  feeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#191C1F',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(58,73,74,0.3)'
-  },
-  feeLabel: {
-    color: '#B9CACA',
-    fontFamily: 'Rajdhani_700Bold',
-    fontSize: 10,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase'
-  },
-  feeValue: {
-    color: '#E1E2E7',
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 12
-  },
-  bentoRow: {
-    flexDirection: 'row',
-    gap: 14
-  },
-  bentoRowStack: {
-    flexDirection: 'column'
-  },
-  heroCard: {
-    flex: 2,
-    borderRadius: 20,
-    padding: 22,
-    minHeight: 300,
-    borderWidth: 1,
-    borderColor: 'rgba(233,254,255,0.1)',
-    overflow: 'hidden'
-  },
-  heroCardStack: {
-    minHeight: 260
-  },
-  heroGlow: {
-    position: 'absolute',
-    width: 320,
-    height: 180,
-    bottom: -20,
-    left: -30,
-    backgroundColor: 'rgba(0,245,255,0.08)',
-    borderRadius: 200
-  },
-  heroTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start'
-  },
-  heroLabel: {
-    color: '#B9CACA',
-    fontFamily: 'Rajdhani_700Bold',
-    fontSize: 12,
-    letterSpacing: 1.1,
-    textTransform: 'uppercase'
-  },
-  heroValue: {
-    marginTop: 6,
-    color: '#FFFFFF',
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 44,
-    letterSpacing: -0.7
-  },
-  heroDelta: {
-    marginTop: 4,
-    color: '#90D5B7',
-    fontFamily: 'Rajdhani_700Bold',
-    fontSize: 14
-  },
-  heroEyeWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  chainRow: {
-    marginTop: 'auto',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
-  },
-  chainPillPrimary: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: 'rgba(50,53,57,0.5)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)'
-  },
-  chainPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 999,
-    backgroundColor: 'rgba(50,53,57,0.3)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.07)'
-  },
-  chainDotPrimary: {
-    width: 8,
-    height: 8,
-    borderRadius: 99,
-    backgroundColor: '#00F5FF'
-  },
-  chainDotSecondary: {
-    width: 8,
-    height: 8,
-    borderRadius: 99,
-    backgroundColor: '#90D5B7'
-  },
-  chainDotMuted: {
-    width: 8,
-    height: 8,
-    borderRadius: 99,
-    backgroundColor: '#C5C4DE'
-  },
-  chainPillPrimaryText: {
-    color: '#00F5FF',
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 12
-  },
-  chainPillText: {
-    color: '#E1E2E7',
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 12
-  },
-  actionsColumn: {
+  safeArea: {
     flex: 1,
-    gap: 10
+    backgroundColor: colors.primaryDark
   },
-  actionsColumnStack: {
-    flexDirection: 'row',
-    flexWrap: 'wrap'
+  gradientContainer: {
+    flex: 1,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    marginBottom: 88,
+    overflow: 'hidden',
+    elevation: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10
   },
-  actionCard: {
+  gradientContainerDesktop: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    marginBottom: 0
+  },
+  headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#191C1F',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(58,73,74,0.3)',
-    minHeight: 84,
-    flexGrow: 1
-  },
-  actionIconWrapPrimary: {
-    width: 42,
-    height: 42,
-    borderRadius: 99,
-    backgroundColor: 'rgba(0,245,255,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  actionIconWrapSecondary: {
-    width: 42,
-    height: 42,
-    borderRadius: 99,
-    backgroundColor: 'rgba(144,213,183,0.13)',
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  actionContent: {
-    flex: 1
-  },
-  actionTitle: {
-    color: '#E9FEFF',
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 16
-  },
-  actionSub: {
-    marginTop: 2,
-    color: '#B9CACA',
-    fontFamily: 'Rajdhani_500Medium',
-    fontSize: 12
-  },
-  lowerRow: {
-    flexDirection: 'row',
-    gap: 16
-  },
-  lowerRowStack: {
-    flexDirection: 'column'
-  },
-  assetSection: {
-    flex: 1.05,
-    gap: 10
-  },
-  assetSectionStack: {
-    flex: 1
-  },
-  activitySection: {
-    flex: 1.35,
-    gap: 10
-  },
-  sectionHeader: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 40,
+    paddingBottom: 12
+  },
+  userProfileGroup: {
+    flexDirection: 'row',
     alignItems: 'center'
   },
-  sectionTitle: {
-    color: '#E9FEFF',
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 22
-  },
-  sectionActions: {
-    flexDirection: 'row',
-    gap: 8
-  },
-  sectionButton: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(0,245,255,0.35)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: 'rgba(0,245,255,0.08)'
-  },
-  sectionButtonDisabled: {
-    opacity: 0.6
-  },
-  sectionButtonText: {
-    color: '#00F5FF',
-    fontFamily: 'Rajdhani_700Bold',
-    fontSize: 11,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase'
-  },
-  sectionAction: {
-    color: '#00F5FF',
-    fontFamily: 'Rajdhani_700Bold',
-    fontSize: 12,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase'
-  },
-  assetCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: '#191C1F',
-    borderWidth: 1,
-    borderColor: 'rgba(58,73,74,0.25)'
-  },
-  assetLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10
-  },
-  assetIconWrap: {
+  avatarCircle: {
     width: 44,
     height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primaryDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative'
+  },
+  avatarInitial: {
+    color: colors.secondary,
+    fontSize: 15,
+    fontFamily: 'Orbitron_700Bold'
+  },
+  activeDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#12B76A',
+    borderWidth: 2,
+    borderColor: '#FFFFFF'
+  },
+  greetingTextGroup: {
+    marginLeft: 12
+  },
+  greetingSub: {
+    color: '#5C768D',
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium'
+  },
+  greetingTitle: {
+    color: colors.primaryDark,
+    fontSize: 16,
+    fontFamily: 'Inter_700Bold'
+  },
+  headerActionsGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  iconCircleButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    position: 'relative'
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 9,
+    height: 9,
+    borderRadius: 4.5,
+    backgroundColor: '#F04438',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+    elevation: 3,
+    shadowColor: '#F04438',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.6,
+    shadowRadius: 3
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 24
+  },
+  digitalCardContainer: {
+    marginTop: 16,
+    marginBottom: 24,
+    position: 'relative',
+    alignItems: 'center'
+  },
+  cardStackTopLayer: {
+    position: 'absolute',
+    top: -10,
+    width: '84%',
+    height: 24,
+    borderRadius: 18,
+    opacity: 0.85,
+    elevation: 3,
+    shadowColor: '#05DA93',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8
+  },
+  cardStackBottomLayer1: {
+    position: 'absolute',
+    bottom: -15,
+    width: '74%',
+    height: 22,
     borderRadius: 14,
-    backgroundColor: '#282A2E',
+    opacity: 0.9,
+    elevation: 2,
+    shadowColor: '#F79E1B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8
+  },
+  cardStackBottomLayer2: {
+    position: 'absolute',
+    bottom: -8,
+    width: '85%',
+    height: 22,
+    borderRadius: 16,
+    opacity: 0.8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)'
+  },
+  digitalCard: {
+    width: '100%',
+    borderRadius: 26,
+    padding: 22,
+    elevation: 8,
+    shadowColor: colors.primaryDark,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)'
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20
+  },
+  cardBrandGroup: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  cardBrandText: {
+    color: colors.secondary,
+    fontSize: 12,
+    fontFamily: 'Orbitron_700Bold',
+    letterSpacing: 1,
+    marginLeft: 6
+  },
+  balanceContainer: {
+    marginBottom: 24
+  },
+  balanceLabel: {
+    color: 'rgba(255, 255, 255, 0.93)',
+    fontSize: 11,
+    fontFamily: 'Inter_700Bold',
+    letterSpacing: 0.8,
+    marginBottom: 4
+  },
+  balanceAmountText: {
+    color: colors.white,
+    fontSize: 34,
+    fontFamily: 'Inter_700Bold',
+    letterSpacing: -0.5
+  },
+  cardFooterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  cardAddressGroup: {},
+  cardAddressLabel: {
+    color: 'rgba(255, 255, 255, 0.93)',
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 0.5
+  },
+  cardAddressValue: {
+    color: colors.white,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    marginTop: 2
+  },
+  algorandWhiteLogo: {
+    width: 100,
+    height: 26,
+    tintColor: '#FFFFFF'
+  },
+  actionGridContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20
+  },
+  actionItem: {
+    alignItems: 'center',
+    flex: 1
+  },
+  actionIconCircle: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+    elevation: 3,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8
+  },
+  actionItemText: {
+    color: colors.primaryDark,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold'
+  },
+  dualPromoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20
+  },
+  promoCardLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(23, 43, 62, 0.12)',
+    elevation: 2,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6
+  },
+  promoIconWrapper: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#172B3E',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8
+  },
+  promoTextGroup: {
+    flex: 1
+  },
+  promoSubtext: {
+    color: '#667085',
+    fontSize: 10,
+    fontFamily: 'Inter_500Medium'
+  },
+  promoTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  promoMainTitle: {
+    color: colors.primaryDark,
+    fontSize: 11,
+    fontFamily: 'Inter_700Bold',
+    marginRight: 2
+  },
+  promoCardRight: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#172B3E',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    elevation: 4,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8
+  },
+  scanIconBox: {
+    marginRight: 10
+  },
+  scanPayText: {
+    color: colors.white,
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold'
+  },
+  idPillBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E4F2EB',
+    borderRadius: 18,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(5, 218, 147, 0.3)',
+    elevation: 2,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6
+  },
+  idPillLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingRight: 8
+  },
+  idPillLeftText: {
+    color: colors.primaryDark,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold'
+  },
+  idPillDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: 'rgba(23, 43, 62, 0.15)',
+    marginHorizontal: 4
+  },
+  idPillRight: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 6
+  },
+  idPillRightText: {
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold'
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12
+  },
+  sectionHeaderTitle: {
+    color: colors.primaryDark,
+    fontSize: 18,
+    fontFamily: 'Orbitron_700Bold'
+  },
+  seeAllLinkText: {
+    color: '#5C768D',
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold'
+  },
+  txCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 10,
+    elevation: 3,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10
+  },
+  avatarContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14
+  },
+  avatarText: {
+    color: colors.white,
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold'
+  },
+  txDetails: {
+    flex: 1
+  },
+  txName: {
+    color: '#172B3E',
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: 2
+  },
+  txType: {
+    color: '#667085',
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium'
+  },
+  txAmount: {
+    fontSize: 16,
+    fontFamily: 'Inter_700Bold',
+    letterSpacing: -0.2
+  },
+  amountPositive: {
+    color: '#12B76A'
+  },
+  amountNegative: {
+    color: '#D92D20'
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(23, 43, 62, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24
+  },
+  receiveModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    position: 'relative',
+    elevation: 10
+  },
+  qrModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    position: 'relative',
+    elevation: 10
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(23, 43, 62, 0.08)',
     alignItems: 'center',
     justifyContent: 'center'
   },
-  assetIconA: {
-    color: '#00F5FF',
+  modalTitle: {
+    color: colors.primaryDark,
+    fontSize: 18,
     fontFamily: 'Orbitron_700Bold',
-    fontSize: 20
+    marginTop: 8,
+    marginBottom: 4
   },
-  assetIconU: {
-    color: '#90D5B7',
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 20
+  modalSub: {
+    color: '#5C768D',
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    textAlign: 'center',
+    marginBottom: 16
   },
-  assetName: {
-    color: '#E9FEFF',
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 15
+  qrBox: {
+    padding: 16,
+    backgroundColor: '#F0F7F3',
+    borderRadius: 20,
+    marginBottom: 16
   },
-  assetAmount: {
-    marginTop: 1,
-    color: '#B9CACA',
-    fontFamily: 'Rajdhani_500Medium',
-    fontSize: 12
+  qrAddressText: {
+    color: colors.primaryDark,
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    marginBottom: 16,
+    textAlign: 'center'
   },
-  assetRight: {
-    alignItems: 'flex-end'
-  },
-  assetUsd: {
-    color: '#E1E2E7',
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 14
-  },
-  assetDelta: {
-    color: '#90D5B7',
-    fontFamily: 'Rajdhani_700Bold',
-    fontSize: 11
-  },
-  assetStable: {
-    color: '#B9CACA',
-    fontFamily: 'Rajdhani_700Bold',
-    fontSize: 11
-  },
-  filterWrap: {
+  copyAddressButton: {
     flexDirection: 'row',
-    gap: 6
-  },
-  filterPillActive: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: '#323539',
-    color: '#E1E2E7',
-    fontFamily: 'Rajdhani_700Bold',
-    fontSize: 10,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase'
-  },
-  filterPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    backgroundColor: '#1D2023',
-    color: '#B9CACA',
-    fontFamily: 'Rajdhani_700Bold',
-    fontSize: 10,
-    letterSpacing: 0.7,
-    textTransform: 'uppercase'
-  },
-  activityList: {
-    gap: 8
-  },
-  noActivity: {
-    color: '#B9CACA',
-    fontFamily: 'Rajdhani_500Medium',
-    fontSize: 14
-  },
-  activityItemRow: {
-    flexDirection: 'row',
-    gap: 10
-  },
-  timelineCol: {
-    width: 26,
-    alignItems: 'center'
-  },
-  timelineIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 99,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(50,53,57,0.4)',
-    borderWidth: 1
+    backgroundColor: colors.secondary,
+    borderRadius: 18,
+    width: '100%',
+    height: 48
   },
-  timelineLine: {
-    marginTop: 2,
-    width: 1,
-    flex: 1,
-    minHeight: 46,
-    backgroundColor: 'rgba(58,73,74,0.4)'
+  copyAddressButtonText: {
+    color: colors.primaryDark,
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold'
   },
-  activityCard: {
-    flex: 1,
-    borderRadius: 14,
-    padding: 12,
-    backgroundColor: '#1D2023',
-    borderWidth: 1,
-    borderColor: 'rgba(58,73,74,0.25)',
-    marginBottom: 8
-  },
-  activityTopLine: {
+  networkStatusPill: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 22,
+    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.14,
+    shadowRadius: 8
   },
-  activityTitle: {
-    color: '#E1E2E7',
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 14
+  onlinePill: {
+    backgroundColor: '#ECFDF3',
+    borderWidth: 1.5,
+    borderColor: 'rgba(18, 183, 106, 0.4)',
+    shadowColor: '#12B76A'
   },
-  activityTo: {
-    color: '#B9CACA',
-    fontFamily: 'Rajdhani_500Medium',
-    fontSize: 12
+  offlinePill: {
+    backgroundColor: '#FEF0C7',
+    borderWidth: 1.5,
+    borderColor: 'rgba(247, 158, 27, 0.5)',
+    shadowColor: '#F79E1B'
   },
-  activityAmount: {
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 13
+  networkDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    marginRight: 6
   },
-  activityBottomLine: {
-    marginTop: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  activityTime: {
-    color: '#B9CACA',
-    fontFamily: 'Rajdhani_500Medium',
-    fontSize: 11
-  },
-  activityBadge: {
-    color: '#90D5B7',
-    fontFamily: 'Rajdhani_700Bold',
-    fontSize: 10,
-    backgroundColor: 'rgba(144,213,183,0.1)',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3
-  },
-  networkFooter: {
-    marginTop: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(58,73,74,0.35)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(17,20,23,0.6)',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    flexWrap: 'wrap',
-    gap: 8
-  },
-  networkFooterText: {
-    color: '#E1E2E7',
-    fontFamily: 'Orbitron_700Bold',
+  networkStatusText: {
     fontSize: 12,
-    letterSpacing: 0.5
-  },
-  networkStatus: {
-    fontFamily: 'Rajdhani_700Bold',
-    fontSize: 12,
-    letterSpacing: 0.5,
-    textTransform: 'uppercase'
-  },
-  online: {
-    color: '#90D5B7'
-  },
-  offline: {
-    color: colors.warning
+    fontFamily: 'Inter_700Bold',
+    letterSpacing: 0.2
   }
 });
