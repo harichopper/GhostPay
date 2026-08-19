@@ -183,7 +183,7 @@ export async function sendAlgoPayment(input: {
       throw new Error('Signed transaction amount does not match request amount');
     }
 
-    const noteText = txn.note?.length ? new TextDecoder().decode(txn.note) : '';
+    const noteText = txn.note?.length ? Buffer.from(txn.note).toString('utf-8') : '';
     if (!noteText.startsWith(`GhostPay:${input.timestamp}`)) {
       throw new Error('Signed transaction note does not match expected GhostPay timestamp marker');
     }

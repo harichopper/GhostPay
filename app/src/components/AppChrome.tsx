@@ -23,6 +23,7 @@ type AppChromeSection = 'dashboard' | 'pay' | 'activity' | 'contacts' | 'setting
 
 type AppChromeProps = {
   activeSection: AppChromeSection;
+  children?: React.ReactNode;
 };
 
 function tabRoute(tab: AppChromeSection): '/(tabs)' | '/(tabs)/send' | '/(tabs)/transactions' | '/identity' | '/settings' {

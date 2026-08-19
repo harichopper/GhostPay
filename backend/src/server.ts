@@ -2,6 +2,7 @@ import cors from 'cors';
 import express from 'express';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './config/env.js';
+import { swaggerSpec } from './config/swagger.js';
 import { connectMongo } from './db/mongo.js';
 import { buildOpenApiSpec } from './docs/openapi.js';
 import { accountRouter } from './routes/accountRoutes.js';
@@ -33,6 +34,8 @@ if (!isProduction && !env.accountsApiKey) {
 
 app.use(cors({ origin: env.corsOrigin }));
 app.use(express.json());
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.get('/health', (_request, response) => {
   response.json({ ok: true, service: 'ghostpay-backend' });
