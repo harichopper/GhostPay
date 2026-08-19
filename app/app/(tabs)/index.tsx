@@ -32,11 +32,13 @@ import { GhostTransaction } from '../../src/types/transaction';
 const AnimatedCounter = ({
   targetValue,
   isHidden,
-  refreshKey = 0
+  refreshKey = 0,
+  symbol = '$'
 }: {
   targetValue: number;
   isHidden: boolean;
   refreshKey?: number;
+  symbol?: string;
 }) => {
   const [displayValue, setDisplayValue] = useState(0);
 
@@ -70,12 +72,12 @@ const AnimatedCounter = ({
   );
 
   if (isHidden) {
-    return <Text style={styles.balanceAmountText}>$ • • • • •</Text>;
+    return <Text style={styles.balanceAmountText}>{symbol} • • • • •</Text>;
   }
 
   return (
     <Text style={styles.balanceAmountText}>
-      ${displayValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+      {symbol}{displayValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
     </Text>
   );
 };
@@ -91,7 +93,9 @@ export default function HomeScreen() {
     toggleDemoOffline,
     generateWalletAddress,
     importWalletFromMnemonic,
-    refreshBalance
+    refreshBalance,
+    displayCurrency,
+    algoRates
   } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
@@ -168,6 +172,29 @@ export default function HomeScreen() {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
+
+  const handleManualRefresh = async () => {
+    if (!walletAddress) return;
+    setIsRefreshingBalance(true);
+    try {
+      await refreshBalance();
+      setRefreshKey((prev) => prev + 1);
+      Toast.show({
+        type: 'success',
+        text1: 'Balance Refreshed',
+        text2: 'Wallet details have been synced.'
+      });
+    } catch {
+      Toast.show({
+        type: 'error',
+        text1: 'Refresh Failed',
+        text2: 'Failed to fetch updated balance.'
+      });
+    } finally {
+      setIsRefreshingBalance(false);
+    }
+  };
 
   const [selectedTx, setSelectedTx] = useState<GhostTransaction | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -204,7 +231,17 @@ export default function HomeScreen() {
     ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
     : '•••• 2872';
 
+  const getCurrencyDetails = (ccy: 'USD' | 'INR' | 'EUR') => {
+    const rates = algoRates || { USD: 0.15, INR: 12.5, EUR: 0.14 };
+    switch (ccy) {
+      case 'INR': return { symbol: '₹', rate: rates.INR || 12.5 };
+      case 'EUR': return { symbol: '€', rate: rates.EUR || 0.14 };
+      default: return { symbol: '$', rate: rates.USD || 0.15 };
+    }
+  };
+  const { symbol: currencySymbol, rate: currencyRate } = getCurrencyDetails(displayCurrency || 'USD');
   const numericBalance = balanceAlgo !== null ? balanceAlgo : 0.00;
+  const usdBalance = numericBalance * currencyRate;
 
   const handleCopyAddress = async () => {
     if (walletAddress) {
@@ -331,13 +368,22 @@ export default function HomeScreen() {
                 </View>
 
                 {walletAddress ? (
-                  <Pressable onPress={() => setIsBalanceHidden(!isBalanceHidden)}>
-                    <Ionicons
-                      name={isBalanceHidden ? 'eye-off-outline' : 'eye-outline'}
-                      size={20}
-                      color="rgba(255, 255, 255, 0.7)"
-                    />
-                  </Pressable>
+                  <View style={styles.cardHeaderActions}>
+                    <Pressable onPress={handleManualRefresh} style={{ marginRight: 14 }} disabled={isRefreshingBalance}>
+                      {isRefreshingBalance ? (
+                        <ActivityIndicator size="small" color="rgba(255, 255, 255, 0.7)" />
+                      ) : (
+                        <Ionicons name="refresh-outline" size={20} color="rgba(255, 255, 255, 0.7)" />
+                      )}
+                    </Pressable>
+                    <Pressable onPress={() => setIsBalanceHidden(!isBalanceHidden)}>
+                      <Ionicons
+                        name={isBalanceHidden ? 'eye-off-outline' : 'eye-outline'}
+                        size={20}
+                        color="rgba(255, 255, 255, 0.7)"
+                      />
+                    </Pressable>
+                  </View>
                 ) : (
                   <Ionicons name="shield-checkmark-outline" size={20} color="rgba(255, 255, 255, 0.7)" />
                 )}
@@ -347,7 +393,14 @@ export default function HomeScreen() {
               <View style={styles.balanceContainer}>
                 <Text style={styles.balanceLabel}>{walletAddress ? 'TOTAL BALANCE' : 'ACCOUNT SETUP'}</Text>
                 {walletAddress ? (
-                  <AnimatedCounter targetValue={numericBalance} isHidden={isBalanceHidden} refreshKey={refreshKey} />
+                  <View style={styles.balanceRow}>
+                    <AnimatedCounter targetValue={usdBalance} isHidden={isBalanceHidden} refreshKey={refreshKey} symbol={currencySymbol} />
+                    {!isBalanceHidden && (
+                      <Text style={styles.algoEquivalentText}>
+                        ≈ {numericBalance.toFixed(2)} ALGO
+                      </Text>
+                    )}
+                  </View>
                 ) : (
                   <Text style={styles.balanceAmountText}>Connect Wallet</Text>
                 )}
@@ -813,6 +866,23 @@ const styles = StyleSheet.create({
     fontSize: 34,
     fontFamily: 'Inter_700Bold',
     letterSpacing: -0.5
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    flexWrap: 'wrap'
+  },
+  algoEquivalentText: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    marginLeft: 4,
+    alignSelf: 'baseline'
+  },
+  cardHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center'
   },
   cardFooterRow: {
     flexDirection: 'row',

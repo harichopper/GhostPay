@@ -30,7 +30,9 @@ export default function SettingsScreen() {
     toggleDemoOffline,
     syncPendingTransactions,
     transactions,
-    disconnectWallet
+    disconnectWallet,
+    displayCurrency,
+    setDisplayCurrency
   } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
@@ -45,6 +47,7 @@ export default function SettingsScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [ghostModeEnabled, setGhostModeEnabled] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
 
   // PIN / Passcode Lock Modal States
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
@@ -147,6 +150,10 @@ export default function SettingsScreen() {
         text2: 'Wallet address saved to clipboard'
       });
     }
+  };
+
+  const handleSelectCurrency = () => {
+    setIsCurrencyModalOpen(true);
   };
 
   const handleManualSync = async () => {
@@ -435,7 +442,7 @@ export default function SettingsScreen() {
 
               <View style={styles.divider} />
 
-              <Pressable style={styles.settingRow} onPress={() => Toast.show({ type: 'info', text1: 'Default Currency', text2: 'USD ($) set as default display' })}>
+              <Pressable style={styles.settingRow} onPress={handleSelectCurrency}>
                 <View style={styles.settingLeft}>
                   <View style={[styles.iconCircle, { backgroundColor: '#F0F9FF' }]}>
                     <Ionicons name="cash" size={20} color="#026AA7" />
@@ -443,7 +450,9 @@ export default function SettingsScreen() {
                   <Text style={styles.settingLabel}>Display Currency</Text>
                 </View>
                 <View style={styles.settingRightPill}>
-                  <Text style={styles.settingRightText}>USD ($)</Text>
+                  <Text style={styles.settingRightText}>
+                    {displayCurrency === 'INR' ? 'INR (₹)' : displayCurrency === 'EUR' ? 'EUR (€)' : 'USD ($)'}
+                  </Text>
                   <Ionicons name="chevron-forward" size={16} color="#98A2B3" style={{ marginLeft: 4 }} />
                 </View>
               </Pressable>
@@ -487,6 +496,64 @@ export default function SettingsScreen() {
           </View>
         </ScrollView>
       </LinearGradient>
+
+      {/* Currency Selector Modal */}
+      <Modal
+        visible={isCurrencyModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsCurrencyModalOpen(false)}
+      >
+        <View style={styles.currencyModalOverlay}>
+          <Animated.View entering={ZoomIn.duration(350).springify()} style={styles.currencyModalCard}>
+            <Pressable style={styles.modalCloseButton} onPress={() => setIsCurrencyModalOpen(false)}>
+              <Ionicons name="close" size={20} color={colors.primaryDark} />
+            </Pressable>
+
+            <Text style={styles.modalTitle}>Display Currency</Text>
+            <Text style={styles.modalSub}>Choose your default currency for balance calculations</Text>
+
+            <View style={styles.optionsList}>
+              {[
+                { code: 'USD', name: 'USD ($) - US Dollar', symbol: '$' },
+                { code: 'INR', name: 'INR (₹) - Indian Rupee', symbol: '₹' },
+                { code: 'EUR', name: 'EUR (€) - Euro', symbol: '€' }
+              ].map((item) => {
+                const isSelected = displayCurrency === item.code;
+                return (
+                  <Pressable
+                    key={item.code}
+                    style={[styles.optionRow, isSelected && styles.optionRowSelected]}
+                    onPress={() => {
+                      setDisplayCurrency(item.code as 'USD' | 'INR' | 'EUR');
+                      setIsCurrencyModalOpen(false);
+                      Toast.show({
+                        type: 'success',
+                        text1: 'Currency Updated',
+                        text2: `Display set to ${item.name}`
+                      });
+                    }}
+                  >
+                    <View style={styles.optionInfo}>
+                      <View style={[styles.symbolCircle, isSelected && styles.symbolCircleSelected]}>
+                        <Text style={[styles.symbolText, isSelected && styles.symbolTextSelected]}>
+                          {item.symbol}
+                        </Text>
+                      </View>
+                      <Text style={[styles.optionNameText, isSelected && styles.optionNameSelected]}>
+                        {item.name}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={22} color={colors.secondary} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
 
       {/* Passcode / PIN Keypad Modal */}
       <Modal
@@ -1060,5 +1127,99 @@ const styles = StyleSheet.create({
   },
   bioStatusPillTextSuccess: {
     color: '#12B76A'
+  },
+  currencyModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(13, 30, 47, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  currencyModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    position: 'relative',
+    elevation: 10,
+    shadowColor: '#0D1E2F',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 15
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 18,
+    right: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10
+  },
+  modalTitle: {
+    fontSize: 19,
+    fontFamily: 'Inter_700Bold',
+    color: colors.primaryDark,
+    marginBottom: 6
+  },
+  modalSub: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#667085',
+    lineHeight: 18,
+    marginBottom: 20
+  },
+  optionsList: {
+    gap: 12
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#F2F4F7',
+    backgroundColor: '#F9FAFB'
+  },
+  optionRowSelected: {
+    borderColor: colors.secondary,
+    backgroundColor: '#ECFDF3'
+  },
+  optionInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  symbolCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EAECF0',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  symbolCircleSelected: {
+    backgroundColor: '#D1FADF'
+  },
+  symbolText: {
+    fontSize: 16,
+    fontFamily: 'Inter_700Bold',
+    color: '#475467'
+  },
+  symbolTextSelected: {
+    color: '#027A48'
+  },
+  optionNameText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#344054'
+  },
+  optionNameSelected: {
+    color: colors.primaryDark
   }
 });

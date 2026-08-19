@@ -64,6 +64,10 @@ type WalletState = {
   demoMode: DemoMode;
   verifiedPhone: string | null;
   setVerifiedPhone: (phone: string | null) => void;
+  displayCurrency: 'USD' | 'INR' | 'EUR';
+  setDisplayCurrency: (currency: 'USD' | 'INR' | 'EUR') => void;
+  algoRates: { USD: number; INR: number; EUR: number };
+  fetchExchangeRates: () => Promise<void>;
   hydrateSampleData: () => void;
   loadNetworkInfo: () => Promise<boolean>;
   setWalletAddress: (address: string) => void;
@@ -178,6 +182,23 @@ export const useWalletStore = create<WalletState>()(
       },
       verifiedPhone: null,
       setVerifiedPhone: (phone) => set({ verifiedPhone: phone }),
+      displayCurrency: 'USD',
+      setDisplayCurrency: (currency) => set({ displayCurrency: currency }),
+      algoRates: { USD: 0.15, INR: 12.5, EUR: 0.14 },
+      fetchExchangeRates: async () => {
+        try {
+          const res = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=ALGO');
+          const data = await res.json() as { data?: { rates?: Record<string, string> } };
+          if (data && data.data && data.data.rates) {
+            const usd = parseFloat(data.data.rates.USD || '0.15');
+            const inr = parseFloat(data.data.rates.INR || '12.5');
+            const eur = parseFloat(data.data.rates.EUR || '0.14');
+            set({ algoRates: { USD: usd, INR: inr, EUR: eur } });
+          }
+        } catch (error) {
+          // Ignore and keep using fallback rates
+        }
+      },
 
       hydrateSampleData: () => {
         const current = get().transactions;
@@ -484,10 +505,12 @@ export const useWalletStore = create<WalletState>()(
       },
 
       refreshBalance: async () => {
-        const { walletAddress } = get();
+        const { walletAddress, fetchExchangeRates } = get();
         if (!walletAddress) {
           return;
         }
+
+        void fetchExchangeRates();
 
         try {
           const balanceAlgo = await fetchBalanceFromApi(walletAddress);
@@ -512,7 +535,8 @@ export const useWalletStore = create<WalletState>()(
         lastBalanceRefreshAt: state.lastBalanceRefreshAt,
         transactions: state.transactions,
         demoMode: state.demoMode,
-        verifiedPhone: state.verifiedPhone
+        verifiedPhone: state.verifiedPhone,
+        displayCurrency: state.displayCurrency
       })
     }
   )
