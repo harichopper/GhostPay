@@ -9,7 +9,7 @@ import { Orbitron_700Bold } from '@expo-google-fonts/orbitron';
 import { Rajdhani_500Medium, Rajdhani_600SemiBold, Rajdhani_700Bold } from '@expo-google-fonts/rajdhani';
 import NetInfo from '@react-native-community/netinfo';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -51,6 +51,7 @@ const toastConfig = {
 };
 
 export default function RootLayout() {
+  const router = useRouter();
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [isAppLoading, setIsAppLoading] = useState(true);
 
@@ -65,6 +66,7 @@ export default function RootLayout() {
     Inter_700Bold
   });
 
+  const walletAddress = useWalletStore((state) => state.walletAddress);
   const setConnectionStatus = useWalletStore((state) => state.setConnectionStatus);
   const syncPendingTransactions = useWalletStore((state) => state.syncPendingTransactions);
   const hydrateSampleData = useWalletStore((state) => state.hydrateSampleData);
@@ -72,7 +74,21 @@ export default function RootLayout() {
 
   useEffect(() => {
     hydrateSampleData();
-    void loadNetworkInfo();
+    void loadNetworkInfo().then((success) => {
+      if (success) {
+        Toast.show({
+          type: 'success',
+          text1: 'Backend Connected',
+          text2: 'Successfully synced network settings.'
+        });
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Backend Offline',
+          text2: 'Could not connect to the backend server.'
+        });
+      }
+    });
 
     const loaderTimer = setTimeout(() => {
       setIsAppLoading(false);
@@ -93,6 +109,8 @@ export default function RootLayout() {
   useEffect(() => {
     setIsClientMounted(true);
   }, []);
+
+
 
   useEffect(() => {
     const subscription = NetInfo.addEventListener((state) => {
@@ -134,6 +152,7 @@ export default function RootLayout() {
         <Stack.Screen name='(tabs)' />
         <Stack.Screen name='analytics' />
         <Stack.Screen name='settings' />
+        <Stack.Screen name='profile' />
         <Stack.Screen name='+not-found' />
       </Stack>
       <StatusBar style='light' />

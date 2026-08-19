@@ -29,7 +29,8 @@ export default function SettingsScreen() {
     demoMode,
     toggleDemoOffline,
     syncPendingTransactions,
-    transactions
+    transactions,
+    disconnectWallet
   } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
@@ -177,12 +178,14 @@ export default function SettingsScreen() {
         {
           text: 'Disconnect',
           style: 'destructive',
-          onPress: () => {
+          onPress: async () => {
+            await disconnectWallet();
             Toast.show({
               type: 'info',
               text1: 'Wallet Disconnected',
-              text2: 'Please sign in or restore seed phrase'
+              text2: 'Your wallet has been disconnected.'
             });
+            router.replace('/');
           }
         }
       ]

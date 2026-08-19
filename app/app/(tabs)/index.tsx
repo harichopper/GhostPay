@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
+  Alert,
   Image,
   Modal,
   Platform,
@@ -14,11 +15,15 @@ import {
   StyleSheet,
   Text,
   useWindowDimensions,
-  View
+  View,
+  ActivityIndicator,
+  TextInput,
+  KeyboardAvoidingView
 } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import TransactionDetailModal from '../../src/components/TransactionDetailModal';
+import { MnemonicBackupModal } from '../../src/components/MnemonicBackupModal';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
 import { GhostTransaction } from '../../src/types/transaction';
@@ -77,11 +82,88 @@ const AnimatedCounter = ({
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { walletAddress, balanceAlgo, transactions, isConnected, demoMode, toggleDemoOffline } = useWalletStore();
+  const {
+    walletAddress,
+    balanceAlgo,
+    transactions,
+    isConnected,
+    demoMode,
+    toggleDemoOffline,
+    generateWalletAddress,
+    importWalletFromMnemonic,
+    refreshBalance
+  } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
 
   const isOnline = isConnected && !demoMode?.simulateOffline;
+
+  // Onboarding local state if wallet is not connected
+  const [loading, setLoading] = useState(false);
+  const [onboardingMode, setOnboardingMode] = useState<'welcome' | 'import'>('welcome');
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [generatedMnemonic, setGeneratedMnemonic] = useState('');
+  const [importMnemonic, setImportMnemonic] = useState('');
+  const [walletLabel, setWalletLabel] = useState('');
+
+  const handleCreateWallet = async () => {
+    setLoading(true);
+    try {
+      const { address, mnemonic } = await generateWalletAddress();
+      setGeneratedMnemonic(mnemonic);
+      setShowBackupModal(true);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to generate wallet address. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImportWallet = async () => {
+    if (!importMnemonic.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Mnemonic Required',
+        text2: 'Please enter your 25-word recovery phrase.'
+      });
+      return;
+    }
+
+    setLoading(true);
+    const result = await importWalletFromMnemonic(importMnemonic, walletLabel || undefined);
+    setLoading(false);
+
+    if (result.success) {
+      Toast.show({
+        type: 'success',
+        text1: 'Wallet Imported',
+        text2: 'Successfully imported and linked your wallet.'
+      });
+    } else {
+      Alert.alert('Import Failed', result.error || 'Invalid seed phrase.');
+    }
+  };
+
+  const handleCopyMnemonic = async () => {
+    await Clipboard.setStringAsync(generatedMnemonic);
+    Toast.show({
+      type: 'success',
+      text1: 'Phrase Copied',
+      text2: 'Recovery phrase copied to clipboard.'
+    });
+  };
+
+  const handleDoneBackup = () => {
+    setShowBackupModal(false);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (walletAddress) {
+        void refreshBalance();
+      }
+    }, [walletAddress])
+  );
   const [isBalanceHidden, setIsBalanceHidden] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -105,17 +187,24 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-      setRefreshKey((prev) => prev + 1);
-    }, 1000);
-  }, []);
+    if (walletAddress) {
+      void refreshBalance().finally(() => {
+        setRefreshing(false);
+        setRefreshKey((prev) => prev + 1);
+      });
+    } else {
+      setTimeout(() => {
+        setRefreshing(false);
+        setRefreshKey((prev) => prev + 1);
+      }, 1000);
+    }
+  }, [walletAddress]);
 
   const formattedAddress = walletAddress
     ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
     : '•••• 2872';
 
-  const numericBalance = balanceAlgo !== null ? balanceAlgo : 12480.50;
+  const numericBalance = balanceAlgo !== null ? balanceAlgo : 0.00;
 
   const handleCopyAddress = async () => {
     if (walletAddress) {
@@ -144,7 +233,7 @@ export default function HomeScreen() {
       >
         {/* Top Header Bar */}
         <View style={styles.headerBar}>
-          <Pressable style={styles.userProfileGroup} onPress={() => router.push('/settings')}>
+          <Pressable style={styles.userProfileGroup} onPress={() => router.push('/profile')}>
             <View style={styles.avatarCircle}>
               <Text style={styles.avatarInitial}>GP</Text>
               <View style={[styles.activeDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
@@ -241,158 +330,242 @@ export default function HomeScreen() {
                   <Text style={styles.cardBrandText}>GHOSTPAY</Text>
                 </View>
 
-                <Pressable onPress={() => setIsBalanceHidden(!isBalanceHidden)}>
-                  <Ionicons
-                    name={isBalanceHidden ? 'eye-off-outline' : 'eye-outline'}
-                    size={20}
-                    color="rgba(255, 255, 255, 0.7)"
-                  />
-                </Pressable>
+                {walletAddress ? (
+                  <Pressable onPress={() => setIsBalanceHidden(!isBalanceHidden)}>
+                    <Ionicons
+                      name={isBalanceHidden ? 'eye-off-outline' : 'eye-outline'}
+                      size={20}
+                      color="rgba(255, 255, 255, 0.7)"
+                    />
+                  </Pressable>
+                ) : (
+                  <Ionicons name="shield-checkmark-outline" size={20} color="rgba(255, 255, 255, 0.7)" />
+                )}
               </View>
 
-              {/* Balance Amount with Smooth Count-Up Animation */}
+              {/* Card Middle Row */}
               <View style={styles.balanceContainer}>
-                <Text style={styles.balanceLabel}>TOTAL BALANCE</Text>
-                <AnimatedCounter targetValue={numericBalance} isHidden={isBalanceHidden} refreshKey={refreshKey} />
+                <Text style={styles.balanceLabel}>{walletAddress ? 'TOTAL BALANCE' : 'ACCOUNT SETUP'}</Text>
+                {walletAddress ? (
+                  <AnimatedCounter targetValue={numericBalance} isHidden={isBalanceHidden} refreshKey={refreshKey} />
+                ) : (
+                  <Text style={styles.balanceAmountText}>Connect Wallet</Text>
+                )}
               </View>
 
               {/* Card Footer Row */}
               <View style={styles.cardFooterRow}>
                 <View style={styles.cardAddressGroup}>
-                  <Text style={styles.cardAddressLabel}>ACCOUNT WALLET</Text>
-                  <Text style={styles.cardAddressValue}>{formattedAddress}</Text>
+                  <Text style={styles.cardAddressLabel}>{walletAddress ? 'ACCOUNT WALLET' : 'NETWORK STATUS'}</Text>
+                  <Text style={styles.cardAddressValue}>
+                    {walletAddress ? formattedAddress : 'Algorand Testnet Ready'}
+                  </Text>
                 </View>
 
-                <Image
-                  source={require('../../assets/branding/algorand-logo.webp')}
-                  style={styles.algorandWhiteLogo}
-                  resizeMode="contain"
-                />
+                {walletAddress ? (
+                  <Image
+                    source={require('../../assets/branding/algorand-logo.webp')}
+                    style={styles.algorandWhiteLogo}
+                    resizeMode="contain"
+                  />
+                ) : (
+                  <Ionicons name="wifi" size={24} color="#FFFFFF" style={{ opacity: 0.6 }} />
+                )}
               </View>
             </LinearGradient>
           </View>
+          {walletAddress ? (
+            <>
+              {/* Dual Promo Row (Pay Super-Fast & Scan & Pay) */}
+              <View style={styles.dualPromoRow}>
+                {/* Left Card: Pay Super-Fast / Offline Vault */}
+                <Pressable style={styles.promoCardLeft} onPress={toggleDemoOffline}>
+                  <View style={styles.promoIconWrapper}>
+                    <Ionicons name="flash" size={18} color="#05DA93" />
+                  </View>
+                  <View style={styles.promoTextGroup}>
+                    <Text style={styles.promoSubtext}>Pay super-fast!</Text>
+                    <View style={styles.promoTitleRow}>
+                      <Text style={styles.promoMainTitle}>OFFLINE VAULT</Text>
+                      <Ionicons name="chevron-forward" size={13} color={colors.primaryDark} />
+                    </View>
+                  </View>
+                </Pressable>
 
-          {/* Dual Promo Row (Pay Super-Fast & Scan & Pay) */}
-          <View style={styles.dualPromoRow}>
-            {/* Left Card: Pay Super-Fast / Offline Vault */}
-            <Pressable style={styles.promoCardLeft} onPress={toggleDemoOffline}>
-              <View style={styles.promoIconWrapper}>
-                <Ionicons name="flash" size={18} color="#05DA93" />
+                {/* Right Card: Scan & Pay */}
+                <Pressable style={styles.promoCardRight} onPress={() => router.push('/send')}>
+                  <View style={styles.scanIconBox}>
+                    <Ionicons name="qr-code" size={22} color={colors.secondary} />
+                  </View>
+                  <Text style={styles.scanPayText}>Scan & Pay</Text>
+                </Pressable>
               </View>
-              <View style={styles.promoTextGroup}>
-                <Text style={styles.promoSubtext}>Pay super-fast!</Text>
-                <View style={styles.promoTitleRow}>
-                  <Text style={styles.promoMainTitle}>OFFLINE VAULT</Text>
-                  <Ionicons name="chevron-forward" size={13} color={colors.primaryDark} />
+
+              {/* Quick Action Grid (Send, Receive, History, Others) */}
+              <View style={styles.actionGridContainer}>
+                <Pressable style={styles.actionItem} onPress={() => router.push('/send')}>
+                  <View style={[styles.actionIconCircle, { backgroundColor: '#E4F2EB' }]}>
+                    <Ionicons name="paper-plane" size={22} color={colors.primaryDark} />
+                  </View>
+                  <Text style={styles.actionItemText}>Send</Text>
+                </Pressable>
+
+                <Pressable style={styles.actionItem} onPress={handleCopyAddress}>
+                  <View style={[styles.actionIconCircle, { backgroundColor: '#EBF4FE' }]}>
+                    <Ionicons name="arrow-down-circle" size={22} color="#2F80ED" />
+                  </View>
+                  <Text style={styles.actionItemText}>Receive</Text>
+                </Pressable>
+
+                <Pressable style={styles.actionItem} onPress={() => router.push('/transactions')}>
+                  <View style={[styles.actionIconCircle, { backgroundColor: '#FEF0C7' }]}>
+                    <Ionicons name="receipt" size={22} color="#DC6803" />
+                  </View>
+                  <Text style={styles.actionItemText}>History</Text>
+                </Pressable>
+
+                <Pressable style={styles.actionItem} onPress={() => router.push('/settings')}>
+                  <View style={[styles.actionIconCircle, { backgroundColor: '#F0EBFB' }]}>
+                    <Ionicons name="apps" size={22} color="#7F56D9" />
+                  </View>
+                  <Text style={styles.actionItemText}>Others</Text>
+                </Pressable>
+              </View>
+
+              {/* Dual Action Pill Bar: My QR Code | GHOST ID + Copy */}
+              <View style={styles.idPillBar}>
+                {/* Left side: My QR code > */}
+                <Pressable style={styles.idPillLeft} onPress={() => setIsQrModalOpen(true)}>
+                  <Ionicons name="qr-code-outline" size={17} color={colors.primaryDark} style={{ marginRight: 6 }} />
+                  <Text style={styles.idPillLeftText}>My QR code</Text>
+                  <Ionicons name="chevron-forward" size={14} color={colors.primaryDark} style={{ marginLeft: 2 }} />
+                </Pressable>
+
+                {/* Vertical Divider Line */}
+                <View style={styles.idPillDivider} />
+
+                {/* Right side: GHOST ID: ghostpay@algo + Copy */}
+                <Pressable style={styles.idPillRight} onPress={handleCopyAddress}>
+                  <Text style={styles.idPillRightText}>GHOST ID: ghostpay@algo</Text>
+                  <Ionicons name="copy-outline" size={15} color={colors.primaryDark} style={{ marginLeft: 6 }} />
+                </Pressable>
+              </View>
+
+              {/* Recent Activity Section Header */}
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionHeaderTitle}>Recent Activity</Text>
+                <Pressable onPress={() => router.push('/transactions')}>
+                  <Text style={styles.seeAllLinkText}>See All</Text>
+                </Pressable>
+              </View>
+
+              {/* Recent Transactions List Preview */}
+              <View>
+                {/* Tx 1 */}
+                <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Eva Novak', 450.0, true)}>
+                  <View style={[styles.avatarContainer, { backgroundColor: '#172B3E' }]}>
+                    <Text style={styles.avatarText}>EN</Text>
+                  </View>
+                  <View style={styles.txDetails}>
+                    <Text style={styles.txName}>Eva Novak</Text>
+                    <Text style={styles.txType}>Received • Today, 2:45 PM</Text>
+                  </View>
+                  <Text style={[styles.txAmount, styles.amountPositive]}>+$450.00</Text>
+                </Pressable>
+
+                {/* Tx 2 */}
+                <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Binance Exchange', -820.0, false)}>
+                  <View style={[styles.avatarContainer, { backgroundColor: '#F0B90B' }]}>
+                    <Ionicons name="logo-bitcoin" size={20} color={colors.white} />
+                  </View>
+                  <View style={styles.txDetails}>
+                    <Text style={styles.txName}>Binance Exchange</Text>
+                    <Text style={styles.txType}>Sent • Yesterday, 6:12 PM</Text>
+                  </View>
+                  <Text style={[styles.txAmount, styles.amountNegative]}>-$820.00</Text>
+                </Pressable>
+
+                {/* Tx 3 */}
+                <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Multiplex Cinema', -124.55, false)}>
+                  <View style={[styles.avatarContainer, { backgroundColor: '#E50914' }]}>
+                    <Ionicons name="film" size={20} color={colors.white} />
+                  </View>
+                  <View style={styles.txDetails}>
+                    <Text style={styles.txName}>Multiplex Cinema</Text>
+                    <Text style={styles.txType}>Paid • 15 Aug, 9:30 PM</Text>
+                  </View>
+                  <Text style={[styles.txAmount, styles.amountNegative]}>-$124.55</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            /* Onboarding Action Card Form Area */
+            onboardingMode === 'welcome' ? (
+              <View style={styles.actionFormCard}>
+                <Text style={styles.formTitle}>Initialize GhostPay Account</Text>
+                <Text style={styles.formSubtitle}>
+                  Create a new Algorand address or link your existing wallet to authorize zero-data vault payments securely.
+                </Text>
+
+                {loading ? (
+                  <ActivityIndicator size="large" color="#05DA93" style={styles.loader} />
+                ) : (
+                  <View style={styles.buttonGroup}>
+                    <Pressable style={styles.primaryButton} onPress={handleCreateWallet}>
+                      <Ionicons name="wallet-outline" size={20} color="#0D1E2F" style={styles.buttonIcon} />
+                      <Text style={styles.primaryButtonText}>Create New Wallet</Text>
+                    </Pressable>
+
+                    <Pressable style={styles.secondaryButton} onPress={() => setOnboardingMode('import')}>
+                      <Ionicons name="download-outline" size={20} color={colors.primaryDark} style={styles.buttonIcon} />
+                      <Text style={styles.secondaryButtonText}>Import Seed Phrase</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            ) : (
+              <View style={styles.actionFormCard}>
+                <View style={styles.backRow}>
+                  <Pressable onPress={() => setOnboardingMode('welcome')} style={styles.backButton}>
+                    <Ionicons name="arrow-back" size={16} color="#667085" style={{ marginRight: 4 }} />
+                    <Text style={styles.backText}>Go Back</Text>
+                  </Pressable>
                 </View>
-              </View>
-            </Pressable>
 
-            {/* Right Card: Scan & Pay */}
-            <Pressable style={styles.promoCardRight} onPress={() => router.push('/send')}>
-              <View style={styles.scanIconBox}>
-                <Ionicons name="qr-code" size={22} color={colors.secondary} />
-              </View>
-              <Text style={styles.scanPayText}>Scan & Pay</Text>
-            </Pressable>
-          </View>
+                <Text style={styles.formTitle}>Import Existing Keys</Text>
+                <Text style={styles.formSubtitle}>
+                  Enter your 25-word Algorand recovery seed phrase.
+                </Text>
 
-          {/* Quick Action Grid (Send, Receive, History, Others) */}
-          <View style={styles.actionGridContainer}>
-            <Pressable style={styles.actionItem} onPress={() => router.push('/send')}>
-              <View style={[styles.actionIconCircle, { backgroundColor: '#E4F2EB' }]}>
-                <Ionicons name="paper-plane" size={22} color={colors.primaryDark} />
-              </View>
-              <Text style={styles.actionItemText}>Send</Text>
-            </Pressable>
+                <TextInput
+                  style={styles.textArea}
+                  placeholder="word1 word2 word3..."
+                  placeholderTextColor="#98A2B3"
+                  multiline
+                  numberOfLines={4}
+                  value={importMnemonic}
+                  onChangeText={setImportMnemonic}
+                  autoCapitalize="none"
+                />
 
-            <Pressable style={styles.actionItem} onPress={handleCopyAddress}>
-              <View style={[styles.actionIconCircle, { backgroundColor: '#EBF4FE' }]}>
-                <Ionicons name="arrow-down-circle" size={22} color="#2F80ED" />
-              </View>
-              <Text style={styles.actionItemText}>Receive</Text>
-            </Pressable>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Wallet Label (e.g. Primary Account)"
+                  placeholderTextColor="#98A2B3"
+                  value={walletLabel}
+                  onChangeText={setWalletLabel}
+                />
 
-            <Pressable style={styles.actionItem} onPress={() => router.push('/transactions')}>
-              <View style={[styles.actionIconCircle, { backgroundColor: '#FEF0C7' }]}>
-                <Ionicons name="receipt" size={22} color="#DC6803" />
+                {loading ? (
+                  <ActivityIndicator size="large" color="#05DA93" style={styles.loader} />
+                ) : (
+                  <Pressable style={styles.primaryButton} onPress={handleImportWallet}>
+                    <Text style={styles.primaryButtonText}>Import Wallet</Text>
+                  </Pressable>
+                )}
               </View>
-              <Text style={styles.actionItemText}>History</Text>
-            </Pressable>
-
-            <Pressable style={styles.actionItem} onPress={() => router.push('/settings')}>
-              <View style={[styles.actionIconCircle, { backgroundColor: '#F0EBFB' }]}>
-                <Ionicons name="apps" size={22} color="#7F56D9" />
-              </View>
-              <Text style={styles.actionItemText}>Others</Text>
-            </Pressable>
-          </View>
-
-          {/* Dual Action Pill Bar: My QR Code | GHOST ID + Copy */}
-          <View style={styles.idPillBar}>
-            {/* Left side: My QR code > */}
-            <Pressable style={styles.idPillLeft} onPress={() => setIsQrModalOpen(true)}>
-              <Ionicons name="qr-code-outline" size={17} color={colors.primaryDark} style={{ marginRight: 6 }} />
-              <Text style={styles.idPillLeftText}>My QR code</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.primaryDark} style={{ marginLeft: 2 }} />
-            </Pressable>
-
-            {/* Vertical Divider Line */}
-            <View style={styles.idPillDivider} />
-
-            {/* Right side: GHOST ID: ghostpay@algo + Copy */}
-            <Pressable style={styles.idPillRight} onPress={handleCopyAddress}>
-              <Text style={styles.idPillRightText}>GHOST ID: ghostpay@algo</Text>
-              <Ionicons name="copy-outline" size={15} color={colors.primaryDark} style={{ marginLeft: 6 }} />
-            </Pressable>
-          </View>
-
-          {/* Recent Activity Section Header */}
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionHeaderTitle}>Recent Activity</Text>
-            <Pressable onPress={() => router.push('/transactions')}>
-              <Text style={styles.seeAllLinkText}>See All</Text>
-            </Pressable>
-          </View>
-
-          {/* Recent Transactions List Preview */}
-          <View>
-            {/* Tx 1 */}
-            <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Eva Novak', 450.0, true)}>
-              <View style={[styles.avatarContainer, { backgroundColor: '#172B3E' }]}>
-                <Text style={styles.avatarText}>EN</Text>
-              </View>
-              <View style={styles.txDetails}>
-                <Text style={styles.txName}>Eva Novak</Text>
-                <Text style={styles.txType}>Received • Today, 2:45 PM</Text>
-              </View>
-              <Text style={[styles.txAmount, styles.amountPositive]}>+$450.00</Text>
-            </Pressable>
-
-            {/* Tx 2 */}
-            <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Binance Exchange', -820.0, false)}>
-              <View style={[styles.avatarContainer, { backgroundColor: '#F0B90B' }]}>
-                <Ionicons name="logo-bitcoin" size={20} color={colors.white} />
-              </View>
-              <View style={styles.txDetails}>
-                <Text style={styles.txName}>Binance Exchange</Text>
-                <Text style={styles.txType}>Sent • Yesterday, 6:12 PM</Text>
-              </View>
-              <Text style={[styles.txAmount, styles.amountNegative]}>-$820.00</Text>
-            </Pressable>
-
-            {/* Tx 3 */}
-            <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Multiplex Cinema', -124.55, false)}>
-              <View style={[styles.avatarContainer, { backgroundColor: '#E50914' }]}>
-                <Ionicons name="film" size={20} color={colors.white} />
-              </View>
-              <View style={styles.txDetails}>
-                <Text style={styles.txName}>Multiplex Cinema</Text>
-                <Text style={styles.txType}>Paid • 15 Aug, 9:30 PM</Text>
-              </View>
-              <Text style={[styles.txAmount, styles.amountNegative]}>-$124.55</Text>
-            </Pressable>
-          </View>
+            )
+          )}
         </ScrollView>
       </LinearGradient>
 
@@ -432,6 +605,13 @@ export default function HomeScreen() {
           </Animated.View>
         </View>
       </Modal>
+
+      <MnemonicBackupModal
+        visible={showBackupModal}
+        mnemonic={generatedMnemonic}
+        onCopy={handleCopyMnemonic}
+        onDone={handleDoneBackup}
+      />
     </SafeAreaView>
   );
 }
@@ -982,5 +1162,110 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_700Bold',
     letterSpacing: 0.2
+  },
+  actionFormCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(23, 43, 62, 0.08)',
+    elevation: 3,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    marginBottom: 20
+  },
+  formTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter_700Bold',
+    color: colors.primaryDark,
+    marginBottom: 6
+  },
+  formSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#667085',
+    lineHeight: 20,
+    marginBottom: 20
+  },
+  buttonGroup: {
+    gap: 12
+  },
+  primaryButton: {
+    backgroundColor: '#05DA93',
+    borderRadius: 14,
+    height: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2
+  },
+  primaryButtonText: {
+    color: '#0D1E2F',
+    fontSize: 14,
+    fontFamily: 'Orbitron_700Bold',
+    letterSpacing: 0.5
+  },
+  secondaryButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: colors.primaryDark,
+    borderRadius: 14,
+    height: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  secondaryButtonText: {
+    color: colors.primaryDark,
+    fontSize: 14,
+    fontFamily: 'Orbitron_700Bold',
+    letterSpacing: 0.5
+  },
+  buttonIcon: {
+    marginRight: 8
+  },
+  loader: {
+    marginVertical: 12
+  },
+  backRow: {
+    flexDirection: 'row',
+    marginBottom: 16
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  backText: {
+    color: '#667085',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13
+  },
+  textArea: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    color: colors.primaryDark,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
+    padding: 12,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    marginBottom: 12
+  },
+  input: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    color: colors.primaryDark,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 14,
+    height: 46,
+    paddingHorizontal: 12,
+    marginBottom: 20
   }
 });

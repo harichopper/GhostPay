@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { fetchBalanceFromApi, fetchNetworkInfo, sendTransactionToAlgorand } from '../services/api';
 import { platformStorage } from '../storage/platformStorage';
-import { loadWalletSecretKey } from '../storage/walletSecretStorage';
+import { loadWalletSecretKey, saveWalletSecretKey, savePendingMnemonic, clearWalletSecretKey } from '../storage/walletSecretStorage';
 import type { GhostTransaction } from '../types/transaction';
 
 const ALGO_TX_FEE_BUFFER = 0.001;
@@ -62,12 +62,16 @@ type WalletState = {
   isSyncing: boolean;
   transactions: GhostTransaction[];
   demoMode: DemoMode;
+  verifiedPhone: string | null;
+  setVerifiedPhone: (phone: string | null) => void;
   hydrateSampleData: () => void;
-  loadNetworkInfo: () => Promise<void>;
+  loadNetworkInfo: () => Promise<boolean>;
   setWalletAddress: (address: string) => void;
   addWallet: (address: string, label?: string) => void;
   removeWallet: (address: string) => void;
-  generateWalletAddress: () => string;
+  generateWalletAddress: () => Promise<{ address: string; mnemonic: string }>;
+  importWalletFromMnemonic: (mnemonic: string, label?: string) => Promise<{ success: boolean; address?: string; error?: string }>;
+  disconnectWallet: () => Promise<void>;
   setConnectionStatus: (isConnected: boolean) => void;
   toggleDemoOffline: () => void;
   toggleDemoSyncSuccess: () => void;
@@ -172,6 +176,8 @@ export const useWalletStore = create<WalletState>()(
         simulateOffline: false,
         simulateSyncSuccess: false
       },
+      verifiedPhone: null,
+      setVerifiedPhone: (phone) => set({ verifiedPhone: phone }),
 
       hydrateSampleData: () => {
         const current = get().transactions;
@@ -220,8 +226,10 @@ export const useWalletStore = create<WalletState>()(
                   simulateSyncSuccess: false
                 }
           }));
+          return true;
         } catch {
           // Keep existing values when backend is temporarily unreachable.
+          return false;
         }
       },
 
@@ -262,14 +270,58 @@ export const useWalletStore = create<WalletState>()(
         });
       },
 
-      generateWalletAddress: () => {
+      generateWalletAddress: async () => {
         const account = algosdk.generateAccount();
         const walletAddress = account.addr.toString();
+        const mnemonic = algosdk.secretKeyToMnemonic(account.sk);
+
+        await saveWalletSecretKey(walletAddress, account.sk);
+        await savePendingMnemonic(walletAddress, mnemonic);
+
         set((state) => ({
           walletAddress,
           wallets: upsertWallet(state.wallets, walletAddress)
         }));
-        return walletAddress;
+        return { address: walletAddress, mnemonic };
+      },
+
+      importWalletFromMnemonic: async (mnemonic: string, label?: string) => {
+        try {
+          const cleanMnemonic = mnemonic.trim();
+          const account = algosdk.mnemonicToSecretKey(cleanMnemonic);
+          const address = account.addr.toString();
+
+          await saveWalletSecretKey(address, account.sk);
+
+          set((state) => ({
+            walletAddress: address,
+            wallets: upsertWallet(state.wallets, address, label)
+          }));
+          return { success: true, address };
+        } catch (error) {
+          return { success: false, error: error instanceof Error ? error.message : 'Invalid mnemonic phrase' };
+        }
+      },
+
+      disconnectWallet: async () => {
+        const { walletAddress, wallets } = get();
+        try {
+          await clearWalletSecretKey(walletAddress);
+          for (const item of wallets) {
+            await clearWalletSecretKey(item.address);
+          }
+        } catch {
+          // Ignore key deletion errors
+        }
+
+        set({
+          walletAddress: '',
+          wallets: [],
+          balanceAlgo: null,
+          lastBalanceRefreshAt: null,
+          transactions: [],
+          verifiedPhone: null
+        });
       },
 
       setConnectionStatus: (isConnected: boolean) => {
@@ -459,7 +511,8 @@ export const useWalletStore = create<WalletState>()(
         balanceAlgo: state.balanceAlgo,
         lastBalanceRefreshAt: state.lastBalanceRefreshAt,
         transactions: state.transactions,
-        demoMode: state.demoMode
+        demoMode: state.demoMode,
+        verifiedPhone: state.verifiedPhone
       })
     }
   )
