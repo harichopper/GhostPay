@@ -103,6 +103,31 @@ export default function RootLayout() {
     return () => clearInterval(timer);
   }, []);
 
+  // Global NetInfo Auto-Broadcaster listener
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const isOnline = Boolean(state.isConnected && state.isInternetReachable !== false);
+
+      if (isOnline) {
+        const store = useWalletStore.getState();
+        const pendingCount = (store.transactions || []).filter(
+          (tx) => tx.status === 'pending' || tx.status === 'syncing'
+        ).length;
+
+        if (pendingCount > 0 && !store.isSyncing) {
+          Toast.show({
+            type: 'info',
+            text1: 'Internet Connection Active',
+            text2: `Broadcasting ${pendingCount} pending offline transaction(s)...`
+          });
+          void store.syncPendingTransactions();
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   useEffect(() => {
     setIsClientMounted(true);
   }, []);

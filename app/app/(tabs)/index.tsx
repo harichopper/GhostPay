@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
+import NetInfo from '@react-native-community/netinfo';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
@@ -20,7 +21,14 @@ import {
   TextInput,
   KeyboardAvoidingView
 } from 'react-native';
-import Animated, { ZoomIn } from 'react-native-reanimated';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withTiming,
+  ZoomIn
+} from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 import QRCode from 'react-native-qrcode-svg';
 import TransactionDetailModal from '../../src/components/TransactionDetailModal';
@@ -104,7 +112,53 @@ export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
 
-  const isOnline = isConnected && !demoMode?.simulateOffline;
+  const [isDeviceOnline, setIsDeviceOnline] = useState<boolean>(true);
+
+  useEffect(() => {
+    // Fetch immediate network state on mount
+    void NetInfo.fetch().then((state) => {
+      if (state && typeof state.isConnected === 'boolean') {
+        setIsDeviceOnline(state.isConnected);
+      }
+    });
+
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      if (state && typeof state.isConnected === 'boolean') {
+        setIsDeviceOnline(state.isConnected);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Network Dot Live Pulsing Animation
+  const dotPulse = useSharedValue(1);
+  const dotOpacity = useSharedValue(1);
+
+  useEffect(() => {
+    dotPulse.value = withRepeat(
+      withSequence(
+        withTiming(1.4, { duration: 900 }),
+        withTiming(1, { duration: 900 })
+      ),
+      -1,
+      true
+    );
+    dotOpacity.value = withRepeat(
+      withSequence(
+        withTiming(0.4, { duration: 900 }),
+        withTiming(1, { duration: 900 })
+      ),
+      -1,
+      true
+    );
+  }, [dotPulse, dotOpacity]);
+
+  const animatedDotStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: dotPulse.value }],
+    opacity: dotOpacity.value
+  }));
+
+  const isOnline = isDeviceOnline;
 
   const hasUnreadNotif = useMemo(() => {
     if (!transactions || transactions.length === 0) return false;
@@ -298,28 +352,18 @@ export default function HomeScreen() {
               </Pressable>
 
               <View style={styles.headerActionsGroup}>
-                <Pressable
-                  style={[styles.networkStatusPill, isOnline ? styles.onlinePill : styles.offlinePill]}
-                  onPress={() => {
-                    toggleDemoOffline();
-                    Toast.show({
-                      type: 'info',
-                      text1: isOnline ? 'Offline Mode Active' : 'Online Mode Active',
-                      text2: isOnline ? 'Simulating zero-data vault payments' : 'Connected to Algorand Testnet'
-                    });
-                  }}
-                >
-                  <Ionicons
-                    name={isOnline ? 'globe-outline' : 'cloud-offline-outline'}
-                    size={14}
-                    color={isOnline ? '#027A48' : '#B54708'}
-                    style={{ marginRight: 5 }}
+                <View style={[styles.networkStatusPill, isOnline ? styles.onlinePill : styles.offlinePill]}>
+                  <Animated.View
+                    style={[
+                      styles.networkDot,
+                      { backgroundColor: isOnline ? '#12B76A' : '#F79E1B', marginRight: 6 },
+                      animatedDotStyle
+                    ]}
                   />
-                  <View style={[styles.networkDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
                   <Text style={[styles.networkStatusText, { color: isOnline ? '#027A48' : '#B54708' }]}>
                     {isOnline ? 'Online' : 'Offline'}
                   </Text>
-                </Pressable>
+                </View>
 
                 <Pressable
                   style={styles.iconCircleButton}
@@ -473,7 +517,7 @@ export default function HomeScreen() {
                   <Text style={styles.actionItemText}>Send</Text>
                 </Pressable>
 
-                <Pressable style={styles.actionItem} onPress={handleCopyAddress}>
+                <Pressable style={styles.actionItem} onPress={() => router.push('/profile')}>
                   <View style={[styles.actionIconCircle, { backgroundColor: '#EBF4FE' }]}>
                     <Ionicons name="arrow-down-circle" size={22} color="#2F80ED" />
                   </View>
@@ -498,7 +542,7 @@ export default function HomeScreen() {
               {/* Dual Action Pill Bar: My QR Code | GHOST ID + Copy */}
               <View style={styles.idPillBar}>
                 {/* Left side: My QR code > */}
-                <Pressable style={styles.idPillLeft} onPress={() => setIsQrModalOpen(true)}>
+                <Pressable style={styles.idPillLeft} onPress={() => router.push('/profile')}>
                   <Ionicons name="qr-code-outline" size={17} color={colors.primaryDark} style={{ marginRight: 6 }} />
                   <Text style={styles.idPillLeftText}>My QR code</Text>
                   <Ionicons name="chevron-forward" size={14} color={colors.primaryDark} style={{ marginLeft: 2 }} />
@@ -1530,7 +1574,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 5,
     borderRadius: 22,
     elevation: 3,
     shadowOffset: { width: 0, height: 3 },

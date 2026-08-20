@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import Toast, { ToastConfigParams } from 'react-native-toast-message';
+import PendingQueueModal from '../../src/components/PendingQueueModal';
 import { useSecurityStore } from '../../src/store/securityStore';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
@@ -86,6 +87,7 @@ export default function SettingsScreen() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
+  const [isPendingQueueModalOpen, setIsPendingQueueModalOpen] = useState(false);
 
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [enteredPin, setEnteredPin] = useState('');
@@ -224,10 +226,11 @@ export default function SettingsScreen() {
     setIsSyncing(true);
     try {
       await syncPendingTransactions();
+      await useWalletStore.getState().refreshBalance();
       Toast.show({
         type: 'success',
         text1: 'Sync Completed',
-        text2: 'Pending offline transactions synced with testnet'
+        text2: 'Offline transactions synced with Algorand Testnet'
       });
     } catch {
       Toast.show({
@@ -237,6 +240,20 @@ export default function SettingsScreen() {
       });
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleToggleOfflineSwitch = async (val: boolean) => {
+    toggleDemoOffline();
+    if (!val) {
+      // Switching from Offline -> Online: sync pending queue immediately
+      await handleManualSync();
+    } else {
+      Toast.show({
+        type: 'info',
+        text1: 'Offline Mode Active',
+        text2: 'Simulating zero-data vault payments'
+      });
     }
   };
 
@@ -336,34 +353,47 @@ export default function SettingsScreen() {
                       <Text style={styles.statusTitle}>
                         {isOfflineDemo ? 'Offline Mode (Simulation)' : 'Algorand Testnet Connected'}
                       </Text>
-                      <Text style={styles.statusSubtitle}>
-                        {pendingCount > 0
-                          ? `${pendingCount} transaction(s) pending sync`
-                          : 'Real-time node sync active'}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                        <Text style={styles.statusSubtitle}>
+                          {pendingCount > 0
+                            ? `${pendingCount} transaction(s) pending sync`
+                            : 'Real-time node sync active'}
+                        </Text>
+                        {pendingCount > 0 && (
+                          <Pressable
+                            style={styles.viewQueuePill}
+                            onPress={() => setIsPendingQueueModalOpen(true)}
+                          >
+                            <Ionicons name="eye" size={12} color={colors.primaryDark} style={{ marginRight: 3 }} />
+                            <Text style={styles.viewQueueText}>View</Text>
+                          </Pressable>
+                        )}
+                      </View>
                     </View>
                   </View>
 
                   <Switch
                     value={isOfflineDemo}
-                    onValueChange={toggleDemoOffline}
+                    onValueChange={handleToggleOfflineSwitch}
                     trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
                     thumbColor={colors.white}
                   />
                 </View>
 
-                {pendingCount > 0 && (
-                  <Pressable
-                    style={[styles.syncButton, isSyncing && { opacity: 0.6 }]}
-                    onPress={handleManualSync}
-                    disabled={isSyncing}
-                  >
-                    <Ionicons name="sync" size={16} color={colors.primaryDark} style={{ marginRight: 6 }} />
-                    <Text style={styles.syncButtonText}>
-                      {isSyncing ? 'Syncing...' : 'Sync Pending Queue Now'}
-                    </Text>
-                  </Pressable>
-                )}
+                <Pressable
+                  style={[styles.syncButton, isSyncing && { opacity: 0.6 }]}
+                  onPress={handleManualSync}
+                  disabled={isSyncing}
+                >
+                  <Ionicons name="sync" size={16} color={colors.primaryDark} style={{ marginRight: 6 }} />
+                  <Text style={styles.syncButtonText}>
+                    {isSyncing
+                      ? 'Syncing with Algorand Node...'
+                      : pendingCount > 0
+                        ? `Sync ${pendingCount} Pending Queue Now`
+                        : 'Sync Node & Refresh Balance'}
+                  </Text>
+                </Pressable>
               </View>
             </>
           )}
@@ -755,6 +785,13 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
+      {/* Pending Offline Queue Modal */}
+      <PendingQueueModal
+        visible={isPendingQueueModalOpen}
+        onClose={() => setIsPendingQueueModalOpen(false)}
+        onSyncAll={handleManualSync}
+        isSyncing={isSyncing}
+      />
     </SafeAreaView>
   );
 }
@@ -924,6 +961,19 @@ const styles = StyleSheet.create({
     color: colors.primaryDark,
     fontSize: 13,
     fontFamily: 'Inter_700Bold'
+  },
+  viewQueuePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 2,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginLeft: 8
+  },
+  viewQueueText: {
+    fontSize: 11,
+    fontFamily: 'Inter_700Bold',
+    color: colors.primaryDark
   },
   sectionGroup: {
     marginBottom: 20

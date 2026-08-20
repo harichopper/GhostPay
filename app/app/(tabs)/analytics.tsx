@@ -21,15 +21,197 @@ import { colors } from '../../src/theme/colors';
 
 export default function AnalyticsScreen() {
   const router = useRouter();
-  const { walletAddress } = useWalletStore();
+  const { walletAddress, transactions, displayCurrency, algoRates } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
   const [analyticsKey, setAnalyticsKey] = useState(0);
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'week' | 'year'>('month');
-  const [selectedBar, setSelectedBar] = useState(2); // Wed ($450)
+  const [selectedBar, setSelectedBar] = useState(2);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('Aug 2026');
   const [selectedYear, setSelectedYear] = useState(2026);
+
+  const currencySymbol = displayCurrency === 'INR' ? '₹' : displayCurrency === 'EUR' ? '€' : '$';
+  const rate = algoRates ? (algoRates[displayCurrency] || 1) : 1;
+
+  const dynamicAnalytics = React.useMemo(() => {
+    if (!transactions || transactions.length === 0) {
+      return {
+        totalOutflowAlgo: 0,
+        formattedTotalOutflow: `${currencySymbol}0.00`,
+        offlineCount: 0,
+        offlineSumConverted: '0.00',
+        offlinePct: 50,
+        onChainCount: 0,
+        onChainSumConverted: '0.00',
+        onChainPct: 50,
+        chartData: [
+          { day: 'Mon', amount: '0.00', height: 15 },
+          { day: 'Tue', amount: '0.00', height: 15 },
+          { day: 'Wed', amount: '0.00', height: 15 },
+          { day: 'Thu', amount: '0.00', height: 15 },
+          { day: 'Fri', amount: '0.00', height: 15 },
+          { day: 'Sat', amount: '0.00', height: 15 },
+          { day: 'Sun', amount: '0.00', height: 15 }
+        ],
+        categories: [
+          {
+            id: 'cat-peer',
+            name: 'Peer-to-Peer Transfers',
+            iconName: 'swap-horizontal' as const,
+            iconBg: '#F0EBFB',
+            iconColor: '#7F56D9',
+            amountConverted: '0.00',
+            pct: 0,
+            count: 0
+          },
+          {
+            id: 'cat-vault',
+            name: 'Offline Vault Payments',
+            iconName: 'flash' as const,
+            iconBg: '#E4F2EB',
+            iconColor: '#12B76A',
+            amountConverted: '0.00',
+            pct: 0,
+            count: 0
+          },
+          {
+            id: 'cat-merchant',
+            name: 'Merchant & Node Services',
+            iconName: 'cart' as const,
+            iconBg: '#FEF3F2',
+            iconColor: '#F04438',
+            amountConverted: '0.00',
+            pct: 0,
+            count: 0
+          }
+        ]
+      };
+    }
+
+    let totalOutflowAlgo = 0;
+    let offlineCount = 0;
+    let offlineSumAlgo = 0;
+    let onChainCount = 0;
+    let onChainSumAlgo = 0;
+
+    const daysSum: { [key: number]: number } = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+
+    transactions.forEach((tx) => {
+      const isPaid = tx.sender?.toLowerCase() === (walletAddress || '').toLowerCase();
+      if (isPaid) {
+        totalOutflowAlgo += tx.amount;
+
+        const txDate = tx.timestamp ? new Date(tx.timestamp) : new Date();
+        const dayIdx = isNaN(txDate.getTime()) ? 0 : txDate.getDay();
+        daysSum[dayIdx] = (daysSum[dayIdx] || 0) + tx.amount;
+
+        if (tx.status === 'pending' || tx.status === 'syncing') {
+          offlineCount++;
+          offlineSumAlgo += tx.amount;
+        } else {
+          onChainCount++;
+          onChainSumAlgo += tx.amount;
+        }
+      }
+    });
+
+    const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const daysOrdered = [1, 2, 3, 4, 5, 6, 0]; // Mon..Sun
+
+    const maxDayVal = Math.max(...Object.values(daysSum), 1);
+
+    const chartData = daysOrdered.map((dIdx) => {
+      const algoVal = daysSum[dIdx] || 0;
+      const convertedVal = algoVal * rate;
+      const pct = Math.max(Math.round((algoVal / maxDayVal) * 85), 15);
+      return {
+        day: dayLabels[dIdx],
+        amount: convertedVal.toFixed(2),
+        height: pct
+      };
+    });
+
+    let peerTransfersAlgo = 0;
+    let peerTransfersCount = 0;
+    let vaultVaultAlgo = 0;
+    let vaultVaultCount = 0;
+    let merchantAlgo = 0;
+    let merchantCount = 0;
+
+    transactions.forEach((tx) => {
+      const isPaid = tx.sender?.toLowerCase() === (walletAddress || '').toLowerCase();
+      if (isPaid) {
+        if (tx.status === 'pending' || tx.status === 'syncing') {
+          vaultVaultAlgo += tx.amount;
+          vaultVaultCount++;
+        } else if (tx.receiver && (tx.receiver.startsWith('+') || tx.receiver.length > 25)) {
+          peerTransfersAlgo += tx.amount;
+          peerTransfersCount++;
+        } else {
+          merchantAlgo += tx.amount;
+          merchantCount++;
+        }
+      }
+    });
+
+    const safeTotal = totalOutflowAlgo || 1;
+    const peerPct = totalOutflowAlgo > 0 ? Math.round((peerTransfersAlgo / safeTotal) * 100) : 0;
+    const vaultPct = totalOutflowAlgo > 0 ? Math.round((vaultVaultAlgo / safeTotal) * 100) : 0;
+    const merchantPct = totalOutflowAlgo > 0 ? Math.max(0, 100 - peerPct - vaultPct) : 0;
+
+    const categories = [
+      {
+        id: 'cat-peer',
+        name: 'Peer-to-Peer Transfers',
+        iconName: 'swap-horizontal' as const,
+        iconBg: '#F0EBFB',
+        iconColor: '#7F56D9',
+        amountConverted: (peerTransfersAlgo * rate).toFixed(2),
+        pct: peerPct,
+        count: peerTransfersCount
+      },
+      {
+        id: 'cat-vault',
+        name: 'Offline Vault Payments',
+        iconName: 'flash' as const,
+        iconBg: '#E4F2EB',
+        iconColor: '#12B76A',
+        amountConverted: (vaultVaultAlgo * rate).toFixed(2),
+        pct: vaultPct,
+        count: vaultVaultCount
+      },
+      {
+        id: 'cat-merchant',
+        name: 'Merchant & Node Services',
+        iconName: 'cart' as const,
+        iconBg: '#FEF3F2',
+        iconColor: '#F04438',
+        amountConverted: (merchantAlgo * rate).toFixed(2),
+        pct: merchantPct,
+        count: merchantCount
+      }
+    ];
+
+    const totalCount = offlineCount + onChainCount || 1;
+    const offlinePct = Math.round((offlineCount / totalCount) * 100) || 50;
+    const onChainPct = 100 - offlinePct;
+
+    const totalOutflowConverted = (totalOutflowAlgo * rate).toFixed(2);
+
+    return {
+      totalOutflowAlgo,
+      formattedTotalOutflow: `${currencySymbol}${totalOutflowConverted}`,
+      offlineCount,
+      offlineSumConverted: (offlineSumAlgo * rate).toFixed(2),
+      offlinePct,
+      onChainCount,
+      onChainSumConverted: (onChainSumAlgo * rate).toFixed(2),
+      onChainPct,
+      chartData,
+      categories
+    };
+  }, [transactions, walletAddress, rate, currencySymbol]);
 
   const monthsList = [
     'Jan', 'Feb', 'Mar', 'Apr',
@@ -42,16 +224,6 @@ export default function AnalyticsScreen() {
     { label: 'Last Month', value: 'Jul 2026' },
     { label: 'Q2 2026', value: 'Jun 2026' },
     { label: 'Year 2026', value: 'Year 2026' }
-  ];
-
-  const chartData = [
-    { day: 'Mon', amount: 240, height: 55 },
-    { day: 'Tue', amount: 120, height: 30 },
-    { day: 'Wed', amount: 450, height: 95 },
-    { day: 'Thu', amount: 180, height: 45 },
-    { day: 'Fri', amount: 310, height: 70 },
-    { day: 'Sat', amount: 90, height: 22 },
-    { day: 'Sun', amount: 34, height: 12 }
   ];
 
   useFocusEffect(
@@ -107,18 +279,18 @@ export default function AnalyticsScreen() {
               <View style={styles.spendingCardHeader}>
                 <View>
                   <Text style={styles.spendingCardLabel}>Total Outflows</Text>
-                  <Text style={styles.spendingAmountText}>$1,424.55</Text>
+                  <Text style={styles.spendingAmountText}>{dynamicAnalytics.formattedTotalOutflow}</Text>
                 </View>
 
                 <View style={styles.trendBadge}>
                   <Ionicons name="trending-up" size={12} color="#12B76A" style={{ marginRight: 4 }} />
-                  <Text style={styles.trendBadgeText}>+12.4%</Text>
+                  <Text style={styles.trendBadgeText}>Active Node</Text>
                 </View>
               </View>
 
               {/* Interactive Bar Chart */}
               <View style={styles.chartContainer}>
-                {chartData.map((item, index) => {
+                {dynamicAnalytics.chartData.map((item, index) => {
                   const isSelected = selectedBar === index;
                   return (
                     <Pressable
@@ -129,7 +301,7 @@ export default function AnalyticsScreen() {
                       {/* Active Tooltip Pill */}
                       {isSelected && (
                         <View style={styles.chartTooltip}>
-                          <Text style={styles.chartTooltipText}>${item.amount}</Text>
+                          <Text style={styles.chartTooltipText}>{currencySymbol}{item.amount}</Text>
                         </View>
                       )}
 
@@ -162,24 +334,24 @@ export default function AnalyticsScreen() {
 
           <Animated.View entering={FadeInDown.duration(450).delay(150)} style={styles.splitCardContainer}>
             <View style={styles.splitProgressTrack}>
-              <View style={[styles.splitProgressFill, { width: '68%', backgroundColor: colors.secondary }]} />
-              <View style={[styles.splitProgressFill, { width: '32%', backgroundColor: '#7F56D9' }]} />
+              <View style={[styles.splitProgressFill, { width: `${dynamicAnalytics.offlinePct}%`, backgroundColor: colors.secondary }]} />
+              <View style={[styles.splitProgressFill, { width: `${dynamicAnalytics.onChainPct}%`, backgroundColor: '#7F56D9' }]} />
             </View>
 
             <View style={styles.splitLegendRow}>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: colors.secondary }]} />
                 <View>
-                  <Text style={styles.legendTitle}>Offline Vault (68%)</Text>
-                  <Text style={styles.legendSub}>$968.69 • 19 Payments</Text>
+                  <Text style={styles.legendTitle}>Offline Vault ({dynamicAnalytics.offlinePct}%)</Text>
+                  <Text style={styles.legendSub}>{currencySymbol}{dynamicAnalytics.offlineSumConverted} • {dynamicAnalytics.offlineCount} Payments</Text>
                 </View>
               </View>
 
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: '#7F56D9' }]} />
                 <View>
-                  <Text style={styles.legendTitle}>On-Chain (32%)</Text>
-                  <Text style={styles.legendSub}>$455.86 • 9 Payments</Text>
+                  <Text style={styles.legendTitle}>On-Chain ({dynamicAnalytics.onChainPct}%)</Text>
+                  <Text style={styles.legendSub}>{currencySymbol}{dynamicAnalytics.onChainSumConverted} • {dynamicAnalytics.onChainCount} Payments</Text>
                 </View>
               </View>
             </View>
@@ -190,62 +362,31 @@ export default function AnalyticsScreen() {
             <Text style={styles.sectionTitle}>Category Breakdown</Text>
           </Animated.View>
 
-          {/* Category 1: Transfers */}
-          <Animated.View entering={FadeInDown.duration(450).delay(210)} style={styles.categoryCard}>
-            <View style={styles.categoryRow}>
-              <View style={[styles.categoryIconCircle, { backgroundColor: '#F0EBFB' }]}>
-                <Ionicons name="swap-horizontal" size={20} color="#7F56D9" />
-              </View>
-              <View style={styles.categoryDetails}>
-                <View style={styles.categoryTitleRow}>
-                  <Text style={styles.categoryName}>Transfers & Exchanges</Text>
-                  <Text style={styles.categoryAmount}>$820.00</Text>
+          {dynamicAnalytics.categories.map((cat, index) => (
+            <Animated.View
+              key={cat.id}
+              entering={FadeInDown.duration(450).delay(210 + index * 30)}
+              style={styles.categoryCard}
+            >
+              <View style={styles.categoryRow}>
+                <View style={[styles.categoryIconCircle, { backgroundColor: cat.iconBg }]}>
+                  <Ionicons name={cat.iconName} size={20} color={cat.iconColor} />
                 </View>
-                <View style={styles.barTrack}>
-                  <View style={[styles.barFill, { width: '57%', backgroundColor: '#7F56D9' }]} />
+                <View style={styles.categoryDetails}>
+                  <View style={styles.categoryTitleRow}>
+                    <Text style={styles.categoryName}>{cat.name}</Text>
+                    <Text style={styles.categoryAmount}>{currencySymbol}{cat.amountConverted}</Text>
+                  </View>
+                  <View style={styles.barTrack}>
+                    <View style={[styles.barFill, { width: `${cat.pct}%`, backgroundColor: cat.iconColor }]} />
+                  </View>
+                  <Text style={styles.categoryPercentText}>
+                    {cat.pct}% of total outflow • {cat.count} txns
+                  </Text>
                 </View>
-                <Text style={styles.categoryPercentText}>57.5% of total outflow</Text>
               </View>
-            </View>
-          </Animated.View>
-
-          {/* Category 2: Shopping & Retail */}
-          <Animated.View entering={FadeInDown.duration(450).delay(240)} style={styles.categoryCard}>
-            <View style={styles.categoryRow}>
-              <View style={[styles.categoryIconCircle, { backgroundColor: '#E4F2EB' }]}>
-                <Ionicons name="cart" size={20} color="#12B76A" />
-              </View>
-              <View style={styles.categoryDetails}>
-                <View style={styles.categoryTitleRow}>
-                  <Text style={styles.categoryName}>Shopping & Retail</Text>
-                  <Text style={styles.categoryAmount}>$480.00</Text>
-                </View>
-                <View style={styles.barTrack}>
-                  <View style={[styles.barFill, { width: '34%', backgroundColor: '#12B76A' }]} />
-                </View>
-                <Text style={styles.categoryPercentText}>33.7% of total outflow</Text>
-              </View>
-            </View>
-          </Animated.View>
-
-          {/* Category 3: Entertainment */}
-          <Animated.View entering={FadeInDown.duration(450).delay(270)} style={styles.categoryCard}>
-            <View style={styles.categoryRow}>
-              <View style={[styles.categoryIconCircle, { backgroundColor: '#FEF3F2' }]}>
-                <Ionicons name="film" size={20} color="#F04438" />
-              </View>
-              <View style={styles.categoryDetails}>
-                <View style={styles.categoryTitleRow}>
-                  <Text style={styles.categoryName}>Entertainment & Movies</Text>
-                  <Text style={styles.categoryAmount}>$124.55</Text>
-                </View>
-                <View style={styles.barTrack}>
-                  <View style={[styles.barFill, { width: '9%', backgroundColor: '#F04438' }]} />
-                </View>
-                <Text style={styles.categoryPercentText}>8.8% of total outflow</Text>
-              </View>
-            </View>
-          </Animated.View>
+            </Animated.View>
+          ))}
         </ScrollView>
           </>
         )}
