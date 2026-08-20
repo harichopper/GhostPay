@@ -412,7 +412,11 @@ export const useWalletStore = create<WalletState>()(
           status: 'pending'
         };
 
-        set({ transactions: [transaction, ...transactions] });
+        const updatedBalance = balanceAlgo !== null ? Math.max(0, balanceAlgo - amount) : balanceAlgo;
+        set({
+          balanceAlgo: updatedBalance,
+          transactions: [transaction, ...transactions]
+        });
 
         // Trigger network sync automatically
         void get().syncPendingTransactions();
@@ -514,10 +518,16 @@ export const useWalletStore = create<WalletState>()(
         void fetchExchangeRates();
 
         try {
-          const balanceAlgo = await fetchBalanceFromApi(walletAddress);
-          set({ balanceAlgo, lastBalanceRefreshAt: new Date().toISOString() });
+          const fetchedBalance = await fetchBalanceFromApi(walletAddress);
+          const currentTxs = get().transactions;
+          const pendingOutgoing = currentTxs
+            .filter((t) => (t.status === 'pending' || t.status === 'syncing') && t.sender?.toLowerCase() === walletAddress.toLowerCase())
+            .reduce((sum, t) => sum + t.amount, 0);
+
+          const finalBalance = Math.max(0, fetchedBalance - pendingOutgoing);
+          set({ balanceAlgo: finalBalance, lastBalanceRefreshAt: new Date().toISOString() });
         } catch {
-          set({ balanceAlgo: null });
+          // Keep current local balance when offline or API call fails
         }
 
         try {
