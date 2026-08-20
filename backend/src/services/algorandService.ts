@@ -191,12 +191,14 @@ export async function sendAlgoPayment(input: {
     };
   }
 
-  if (input.signedTxnBase64) {
-    if (env.contractAppId > 0 || env.enforceContract) {
-      throw new Error('Client-signed mode currently supports direct payments only. Disable contract mode or use server signer mode.');
-    }
+  const isClientSigned = Boolean(
+    input.signedTxnBase64 &&
+    input.signedTxnBase64 !== 'string' &&
+    input.signedTxnBase64.trim().length > 0
+  );
 
-    const signedBytes = Uint8Array.from(Buffer.from(input.signedTxnBase64, 'base64'));
+  if (isClientSigned) {
+    const signedBytes = Uint8Array.from(Buffer.from(input.signedTxnBase64!, 'base64'));
     const decoded = algosdk.decodeSignedTransaction(signedBytes);
     const txn = decoded.txn;
 
@@ -243,11 +245,8 @@ export async function sendAlgoPayment(input: {
   }
 
   const account = algosdk.mnemonicToSecretKey(env.signerMnemonic);
+  // Server-signed mode: use backend signer account as the sender
   const senderAddress = account.addr.toString();
-
-  if (input.sender !== senderAddress) {
-    throw new Error(`Sender must match server signer wallet (${senderAddress})`);
-  }
 
   const algod = getAlgodClient();
   const accountInfo = await algod.accountInformation(senderAddress).do();
