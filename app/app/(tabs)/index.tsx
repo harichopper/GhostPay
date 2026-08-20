@@ -270,49 +270,57 @@ export default function HomeScreen() {
       >
         {/* Top Header Bar */}
         <View style={styles.headerBar}>
-          <Pressable style={styles.userProfileGroup} onPress={() => router.push('/profile')}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitial}>GP</Text>
-              <View style={[styles.activeDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
-            </View>
-            <View style={styles.greetingTextGroup}>
-              <Text style={styles.greetingSub}>Welcome back,</Text>
-              <Text style={styles.greetingTitle}>GhostPay User</Text>
-            </View>
-          </Pressable>
+          {walletAddress ? (
+            <>
+              <Pressable style={styles.userProfileGroup} onPress={() => router.push('/profile')}>
+                <View style={styles.avatarCircle}>
+                  <Text style={styles.avatarInitial}>GP</Text>
+                  <View style={[styles.activeDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
+                </View>
+                <View style={styles.greetingTextGroup}>
+                  <Text style={styles.greetingSub}>Welcome back,</Text>
+                  <Text style={styles.greetingTitle}>GhostPay User</Text>
+                </View>
+              </Pressable>
 
-          <View style={styles.headerActionsGroup}>
-            <Pressable
-              style={[styles.networkStatusPill, isOnline ? styles.onlinePill : styles.offlinePill]}
-              onPress={() => {
-                toggleDemoOffline();
-                Toast.show({
-                  type: 'info',
-                  text1: isOnline ? 'Offline Mode Active' : 'Online Mode Active',
-                  text2: isOnline ? 'Simulating zero-data vault payments' : 'Connected to Algorand Testnet'
-                });
-              }}
-            >
-              <Ionicons
-                name={isOnline ? 'globe-outline' : 'cloud-offline-outline'}
-                size={14}
-                color={isOnline ? '#027A48' : '#B54708'}
-                style={{ marginRight: 5 }}
-              />
-              <View style={[styles.networkDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
-              <Text style={[styles.networkStatusText, { color: isOnline ? '#027A48' : '#B54708' }]}>
-                {isOnline ? 'Online' : 'Offline'}
-              </Text>
-            </Pressable>
+              <View style={styles.headerActionsGroup}>
+                <Pressable
+                  style={[styles.networkStatusPill, isOnline ? styles.onlinePill : styles.offlinePill]}
+                  onPress={() => {
+                    toggleDemoOffline();
+                    Toast.show({
+                      type: 'info',
+                      text1: isOnline ? 'Offline Mode Active' : 'Online Mode Active',
+                      text2: isOnline ? 'Simulating zero-data vault payments' : 'Connected to Algorand Testnet'
+                    });
+                  }}
+                >
+                  <Ionicons
+                    name={isOnline ? 'globe-outline' : 'cloud-offline-outline'}
+                    size={14}
+                    color={isOnline ? '#027A48' : '#B54708'}
+                    style={{ marginRight: 5 }}
+                  />
+                  <View style={[styles.networkDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
+                  <Text style={[styles.networkStatusText, { color: isOnline ? '#027A48' : '#B54708' }]}>
+                    {isOnline ? 'Online' : 'Offline'}
+                  </Text>
+                </Pressable>
 
-            <Pressable
-              style={styles.iconCircleButton}
-              onPress={() => router.push('/notification')}
-            >
-              <Ionicons name="notifications-outline" size={20} color={colors.primaryDark} />
-              <View style={styles.notifBadge} />
-            </Pressable>
-          </View>
+                <Pressable
+                  style={styles.iconCircleButton}
+                  onPress={() => router.push('/notification')}
+                >
+                  <Ionicons name="notifications-outline" size={20} color={colors.primaryDark} />
+                  <View style={styles.notifBadge} />
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <>
+            
+            </>
+          )}
         </View>
 
         <ScrollView
@@ -327,47 +335,47 @@ export default function HomeScreen() {
             />
           }
         >
-          {/* Main Digital Card Display */}
-          <View style={styles.digitalCardContainer}>
-            {/* Top Stacked Card Peeking Layer (Neon Mint #05DA93) */}
-            <LinearGradient
-              colors={['#05DA93', '#00B87A']}
-              style={styles.cardStackTopLayer}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            />
+          {/* Main Digital Card Display (Only rendered when wallet is connected) */}
+          {walletAddress && (
+            <View style={styles.digitalCardContainer}>
+              {/* Top Stacked Card Peeking Layer (Neon Mint #05DA93) */}
+              <LinearGradient
+                colors={['#05DA93', '#00B87A']}
+                style={styles.cardStackTopLayer}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              />
 
-            {/* Bottom Stacked Card Layer 1 (Furthest Gold/Yellow) */}
-            <LinearGradient
-              colors={['#FFE033', '#F79E1B']}
-              style={styles.cardStackBottomLayer1}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            />
+              {/* Bottom Stacked Card Layer 1 (Furthest Gold/Yellow) */}
+              <LinearGradient
+                colors={['#FFE033', '#F79E1B']}
+                style={styles.cardStackBottomLayer1}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              />
 
-            {/* Bottom Stacked Card Layer 2 (Soft Yellow Accent) */}
-            <LinearGradient
-              colors={['#FFF066', '#FFC700']}
-              style={styles.cardStackBottomLayer2}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            />
+              {/* Bottom Stacked Card Layer 2 (Soft Yellow Accent) */}
+              <LinearGradient
+                colors={['#FFF066', '#FFC700']}
+                style={styles.cardStackBottomLayer2}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              />
 
-            {/* Main Front Digital Card */}
-            <LinearGradient
-              colors={['#172B3E', '#0D1E2F', '#172B3E']}
-              style={styles.digitalCard}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              {/* Card Top Row */}
-              <View style={styles.cardTopRow}>
-                <View style={styles.cardBrandGroup}>
-                  <Ionicons name="flash-sharp" size={18} color={colors.secondary} />
-                  <Text style={styles.cardBrandText}>GHOSTPAY</Text>
-                </View>
+              {/* Main Front Digital Card */}
+              <LinearGradient
+                colors={['#172B3E', '#0D1E2F', '#172B3E']}
+                style={styles.digitalCard}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                {/* Card Top Row */}
+                <View style={styles.cardTopRow}>
+                  <View style={styles.cardBrandGroup}>
+                    <Ionicons name="flash-sharp" size={18} color={colors.secondary} />
+                    <Text style={styles.cardBrandText}>GHOSTPAY</Text>
+                  </View>
 
-                {walletAddress ? (
                   <View style={styles.cardHeaderActions}>
                     <Pressable onPress={handleManualRefresh} style={{ marginRight: 14 }} disabled={isRefreshingBalance}>
                       {isRefreshingBalance ? (
@@ -384,15 +392,11 @@ export default function HomeScreen() {
                       />
                     </Pressable>
                   </View>
-                ) : (
-                  <Ionicons name="shield-checkmark-outline" size={20} color="rgba(255, 255, 255, 0.7)" />
-                )}
-              </View>
+                </View>
 
-              {/* Card Middle Row */}
-              <View style={styles.balanceContainer}>
-                <Text style={styles.balanceLabel}>{walletAddress ? 'TOTAL BALANCE' : 'ACCOUNT SETUP'}</Text>
-                {walletAddress ? (
+                {/* Card Middle Row */}
+                <View style={styles.balanceContainer}>
+                  <Text style={styles.balanceLabel}>TOTAL BALANCE</Text>
                   <View style={styles.balanceRow}>
                     <AnimatedCounter targetValue={usdBalance} isHidden={isBalanceHidden} refreshKey={refreshKey} symbol={currencySymbol} />
                     {!isBalanceHidden && (
@@ -401,32 +405,24 @@ export default function HomeScreen() {
                       </Text>
                     )}
                   </View>
-                ) : (
-                  <Text style={styles.balanceAmountText}>Connect Wallet</Text>
-                )}
-              </View>
-
-              {/* Card Footer Row */}
-              <View style={styles.cardFooterRow}>
-                <View style={styles.cardAddressGroup}>
-                  <Text style={styles.cardAddressLabel}>{walletAddress ? 'ACCOUNT WALLET' : 'NETWORK STATUS'}</Text>
-                  <Text style={styles.cardAddressValue}>
-                    {walletAddress ? formattedAddress : 'Algorand Testnet Ready'}
-                  </Text>
                 </View>
 
-                {walletAddress ? (
+                {/* Card Footer Row */}
+                <View style={styles.cardFooterRow}>
+                  <View style={styles.cardAddressGroup}>
+                    <Text style={styles.cardAddressLabel}>ACCOUNT WALLET</Text>
+                    <Text style={styles.cardAddressValue}>{formattedAddress}</Text>
+                  </View>
+
                   <Image
                     source={require('../../assets/branding/algorand-logo.webp')}
                     style={styles.algorandWhiteLogo}
                     resizeMode="contain"
                   />
-                ) : (
-                  <Ionicons name="wifi" size={24} color="#FFFFFF" style={{ opacity: 0.6 }} />
-                )}
-              </View>
-            </LinearGradient>
-          </View>
+                </View>
+              </LinearGradient>
+            </View>
+          )}
           {walletAddress ? (
             <>
               {/* Dual Promo Row (Pay Super-Fast & Scan & Pay) */}
@@ -553,30 +549,91 @@ export default function HomeScreen() {
             </>
           ) : (
             /* Onboarding Action Card Form Area */
-            onboardingMode === 'welcome' ? (
-              <View style={styles.actionFormCard}>
-                <Text style={styles.formTitle}>Initialize GhostPay Account</Text>
-                <Text style={styles.formSubtitle}>
-                  Create a new Algorand address or link your existing wallet to authorize zero-data vault payments securely.
-                </Text>
-
-                {loading ? (
-                  <ActivityIndicator size="large" color="#05DA93" style={styles.loader} />
-                ) : (
-                  <View style={styles.buttonGroup}>
-                    <Pressable style={styles.primaryButton} onPress={handleCreateWallet}>
-                      <Ionicons name="wallet-outline" size={20} color="#0D1E2F" style={styles.buttonIcon} />
-                      <Text style={styles.primaryButtonText}>Create New Wallet</Text>
-                    </Pressable>
-
-                    <Pressable style={styles.secondaryButton} onPress={() => setOnboardingMode('import')}>
-                      <Ionicons name="download-outline" size={20} color={colors.primaryDark} style={styles.buttonIcon} />
-                      <Text style={styles.secondaryButtonText}>Import Seed Phrase</Text>
-                    </Pressable>
-                  </View>
-                )}
+            <View style={styles.onboardingWrapper}>
+              <View style={styles.onboardingLogoWrapper}>
+                <Image
+                  source={require('../../assets/app_logo/ghostPay-logo-index.png')}
+                  style={styles.onboardingBrandLogo}
+                  resizeMode="contain"
+                />
+                <Text style={styles.onboardingBrandText}>GHOSTPAY</Text>
               </View>
-            ) : (
+
+              {onboardingMode === 'welcome' ? (
+                <>
+                  <View style={styles.actionFormCard}>
+                    {/* Header Row: Checkmark Badge + Title */}
+                    <View style={styles.formTitleRow}>
+                      <View style={styles.topLeftBadgeIcon}>
+                        <Ionicons name="checkmark-sharp" size={16} color="#0E9F6E" />
+                      </View>
+                      <Text style={styles.formTitleInline}>Initialize GhostPay Account</Text>
+                    </View>
+                    <Text style={styles.formSubtitle}>
+                      Create a new Algorand address or link your existing wallet to authorize zero-data vault payments securely.
+                    </Text>
+
+                    {/* 3-Column Feature Highlights Box */}
+                    <View style={styles.featureHighlightsBox}>
+                      {/* Col 1: Secure */}
+                      <View style={styles.featureCol}>
+                        <Ionicons name="shield-outline" size={24} color="#0E9F6E" style={{ marginBottom: 6 }} />
+                        <Text style={styles.featureTitle}>Secure</Text>
+                        <Text style={styles.featureSubtitle}>Zero-data vault protection</Text>
+                      </View>
+
+                      <View style={styles.featureDivider} />
+
+                      {/* Col 2: Instant */}
+                      <View style={styles.featureCol}>
+                        <Ionicons name="flash-outline" size={24} color="#0E9F6E" style={{ marginBottom: 6 }} />
+                        <Text style={styles.featureTitle}>Instant</Text>
+                        <Text style={styles.featureSubtitle}>Algorand powered</Text>
+                      </View>
+
+                      <View style={styles.featureDivider} />
+
+                      {/* Col 3: Private */}
+                      <View style={styles.featureCol}>
+                        <Ionicons name="lock-closed-outline" size={24} color="#0E9F6E" style={{ marginBottom: 6 }} />
+                        <Text style={styles.featureTitle}>Private</Text>
+                        <Text style={styles.featureSubtitle}>You control your assets</Text>
+                      </View>
+                    </View>
+
+                    {loading ? (
+                      <ActivityIndicator size="large" color="#05DA93" style={styles.loader} />
+                    ) : (
+                      <View style={styles.buttonGroup}>
+                        <Pressable style={styles.primaryThemeButton} onPress={handleCreateWallet}>
+                          <Ionicons name="wallet-outline" size={20} color={colors.primaryDark} style={{ marginRight: 8 }} />
+                          <Text style={styles.primaryThemeButtonText}>Create New Wallet</Text>
+                        </Pressable>
+
+                        <Pressable style={styles.secondaryThemeButton} onPress={() => setOnboardingMode('import')}>
+                          <Ionicons name="download-outline" size={20} color={colors.primaryDark} style={{ marginRight: 8 }} />
+                          <Text style={styles.secondaryThemeButtonText}>Import Seed Phrase</Text>
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* AI-Powered Payment Protection Bottom Banner */}
+                  <View style={styles.aiProtectionCard}>
+                    <View style={styles.aiIconBadge}>
+                      <Ionicons name="checkmark" size={18} color="#FFFFFF" />
+                    </View>
+                    <View style={styles.aiTextContainer}>
+                      <Text style={styles.aiTitle}>AI-Powered Payment Protection</Text>
+                      <Text style={styles.aiSubtitle}>GhostPay uses AI + x402 to keep your payments safe.</Text>
+                    </View>
+                    <View style={styles.aiActiveBadge}>
+                      <View style={styles.aiDotGreen} />
+                      <Text style={styles.aiActiveText}>Active</Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
               <View style={styles.actionFormCard}>
                 <View style={styles.backRow}>
                   <Pressable onPress={() => setOnboardingMode('welcome')} style={styles.backButton}>
@@ -617,8 +674,9 @@ export default function HomeScreen() {
                   </Pressable>
                 )}
               </View>
-            )
-          )}
+            )}
+          </View>
+        )}
         </ScrollView>
       </LinearGradient>
 
@@ -740,6 +798,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter_700Bold'
   },
+  brandHeaderDisconnected: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4
+  },
+  brandHeaderText: {
+    color: colors.primaryDark,
+    fontSize: 18,
+    fontFamily: 'Orbitron_700Bold',
+    letterSpacing: 1.5
+  },
   headerActionsGroup: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -784,6 +853,178 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     position: 'relative',
     alignItems: 'center'
+  },
+  onboardingWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    paddingTop: 10
+  },
+  onboardingLogoWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    marginBottom: 20
+  },
+  onboardingBrandLogo: {
+    width: 120,
+    height: 120
+  },
+  onboardingBrandText: {
+    color: colors.primaryDark,
+    fontSize: 22,
+    fontFamily: 'Orbitron_700Bold',
+    letterSpacing: 1.5,
+    marginTop: 8
+  },
+  formTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  formTitleInline: {
+    fontSize: 20,
+    fontFamily: 'Inter_700Bold',
+    color: '#101828',
+    flex: 1
+  },
+  topLeftBadgeIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#D1FADF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10
+  },
+  featureHighlightsBox: {
+    flexDirection: 'row',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#EAECF0',
+    paddingVertical: 14,
+    paddingHorizontal: 8,
+    marginVertical: 18,
+    alignItems: 'center'
+  },
+  featureCol: {
+    flex: 1,
+    alignItems: 'center',
+    paddingHorizontal: 4
+  },
+  featureTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter_700Bold',
+    color: '#101828',
+    marginBottom: 2
+  },
+  featureSubtitle: {
+    fontSize: 10,
+    fontFamily: 'Inter_500Medium',
+    color: '#667085',
+    textAlign: 'center',
+    lineHeight: 14
+  },
+  featureDivider: {
+    width: 1,
+    height: '70%',
+    backgroundColor: '#EAECF0'
+  },
+  buttonGroup: {
+    width: '100%',
+    alignItems: 'center'
+  },
+  primaryThemeButton: {
+    width: '100%',
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.secondary,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    elevation: 3,
+    shadowColor: colors.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8
+  },
+  primaryThemeButtonText: {
+    color: colors.primaryDark,
+    fontSize: 15,
+    fontFamily: 'Inter_700Bold'
+  },
+  secondaryThemeButton: {
+    width: '100%',
+    height: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: colors.primaryDark,
+    marginTop: 12
+  },
+  secondaryThemeButtonText: {
+    color: colors.primaryDark,
+    fontSize: 15,
+    fontFamily: 'Inter_700Bold'
+  },
+  aiProtectionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    padding: 14,
+    marginTop: 16,
+    width: '100%'
+  },
+  aiIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#059669',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12
+  },
+  aiTextContainer: {
+    flex: 1
+  },
+  aiTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter_700Bold',
+    color: '#065F46',
+    marginBottom: 2
+  },
+  aiSubtitle: {
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+    color: '#047857'
+  },
+  aiActiveBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#D1FADF',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12
+  },
+  aiDotGreen: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#059669',
+    marginRight: 5
+  },
+  aiActiveText: {
+    fontSize: 11,
+    fontFamily: 'Inter_700Bold',
+    color: '#065F46'
   },
   cardStackTopLayer: {
     position: 'absolute',
@@ -1236,7 +1477,8 @@ const styles = StyleSheet.create({
   actionFormCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
     borderWidth: 1,
     borderColor: 'rgba(23, 43, 62, 0.08)',
     elevation: 3,
@@ -1258,9 +1500,6 @@ const styles = StyleSheet.create({
     color: '#667085',
     lineHeight: 20,
     marginBottom: 20
-  },
-  buttonGroup: {
-    gap: 12
   },
   primaryButton: {
     backgroundColor: '#05DA93',
