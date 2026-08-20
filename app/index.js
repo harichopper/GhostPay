@@ -1,10 +1,9 @@
 import 'react-native-get-random-values';
-if (typeof globalThis.crypto === 'undefined' && typeof global.crypto !== 'undefined') {
-  globalThis.crypto = global.crypto;
-} else if (typeof globalThis.crypto === 'object' && typeof global.crypto === 'object') {
-  if (!globalThis.crypto.getRandomValues && global.crypto.getRandomValues) {
-    globalThis.crypto.getRandomValues = global.crypto.getRandomValues;
-  }
+if (typeof globalThis.crypto === 'undefined') {
+  globalThis.crypto = global.crypto || {};
+}
+if (global.crypto && !globalThis.crypto.getRandomValues) {
+  globalThis.crypto.getRandomValues = global.crypto.getRandomValues;
 }
 import { Buffer } from 'buffer';
 

@@ -15,10 +15,13 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
+import { WalletOnboardingCard } from '../../src/components/WalletOnboardingCard';
+import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
 
 export default function AnalyticsScreen() {
   const router = useRouter();
+  const { walletAddress } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
   const [analyticsKey, setAnalyticsKey] = useState(0);
@@ -82,7 +85,13 @@ export default function AnalyticsScreen() {
           </Pressable>
         </View>
 
-        <ScrollView
+        {!walletAddress ? (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10 }}>
+            <WalletOnboardingCard />
+          </ScrollView>
+        ) : (
+          <>
+            <ScrollView
           key={analyticsKey}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
@@ -238,6 +247,8 @@ export default function AnalyticsScreen() {
             </View>
           </Animated.View>
         </ScrollView>
+          </>
+        )}
       </LinearGradient>
 
       {/* Date & Month Picker Filter Modal */}

@@ -28,6 +28,7 @@ import Animated, {
   ZoomIn
 } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
+import { WalletOnboardingCard } from '../../src/components/WalletOnboardingCard';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
 
@@ -209,7 +210,13 @@ export default function SendScreen() {
           <View style={{ width: 40 }} />
         </View>
 
-        {/* Tab Switcher (Scan vs Send) */}
+        {!walletAddress ? (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10 }}>
+            <WalletOnboardingCard />
+          </ScrollView>
+        ) : (
+          <>
+            {/* Tab Switcher (Scan vs Send) */}
         <View style={styles.tabSwitcherContainer}>
           <Pressable
             style={[styles.switcherTab, activeTab === 'scan' && styles.switcherTabActive]}
@@ -405,6 +412,8 @@ export default function SendScreen() {
             </View>
           )}
         </ScrollView>
+          </>
+        )}
       </LinearGradient>
 
       {/* Animated Camera Permission Request Popup Overlay */}

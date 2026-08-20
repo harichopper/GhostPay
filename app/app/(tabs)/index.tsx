@@ -569,7 +569,7 @@ export default function HomeScreen() {
                     <View style={styles.centeredHeaderWrapper}>
 
                       <Text style={styles.centeredFormSubtitle}>
-                        Create a new Algorand address or link your existing wallet to authorize zero-data vault payments securely.
+                        Create or link your wallet to authorize secure zero-data payments.
                       </Text>
                     </View>
 
@@ -899,7 +899,7 @@ const styles = StyleSheet.create({
   },
   centeredFormTitle: {
     fontSize: 22,
-    fontFamily: 'Inter_700Bold',
+    fontFamily: 'Orbitron_700Bold',
     color: '#0F172A',
     textAlign: 'center',
     letterSpacing: -0.4,

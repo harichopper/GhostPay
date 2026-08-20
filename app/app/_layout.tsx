@@ -1,3 +1,4 @@
+import 'react-native-get-random-values';
 import { Ionicons } from '@expo/vector-icons';
 import {
   Inter_400Regular,

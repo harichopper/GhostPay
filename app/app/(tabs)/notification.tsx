@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import Toast from 'react-native-toast-message';
 import TransactionDetailModal from '../../src/components/TransactionDetailModal';
+import { WalletOnboardingCard } from '../../src/components/WalletOnboardingCard';
+import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
 import { GhostTransaction } from '../../src/types/transaction';
 
@@ -76,8 +78,9 @@ const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   }
 ];
 
-export default function NotificationsScreen() {
+export default function NotificationScreen() {
   const router = useRouter();
+  const { walletAddress } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
 
@@ -166,7 +169,13 @@ export default function NotificationsScreen() {
           )}
         </View>
 
-        {/* Filter Categories Row */}
+        {!walletAddress ? (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10 }}>
+            <WalletOnboardingCard />
+          </ScrollView>
+        ) : (
+          <>
+            {/* Filter Categories Row */}
         <View style={styles.filterRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
             {[
@@ -235,6 +244,8 @@ export default function NotificationsScreen() {
             </>
           )}
         </ScrollView>
+          </>
+        )}
       </LinearGradient>
 
       <TransactionDetailModal

@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import TransactionDetailModal from '../../src/components/TransactionDetailModal';
+import { WalletOnboardingCard } from '../../src/components/WalletOnboardingCard';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
 import { GhostTransaction } from '../../src/types/transaction';
@@ -223,7 +224,13 @@ export default function TransactionsScreen() {
           </Pressable>
         </View>
 
-        {/* Search Bar Input */}
+        {!walletAddress ? (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 10 }}>
+            <WalletOnboardingCard />
+          </ScrollView>
+        ) : (
+          <>
+            {/* Search Bar Input */}
         {isSearchVisible && (
           <View style={styles.searchBarContainer}>
             <Ionicons name="search" size={18} color={colors.primaryDark} style={styles.searchIcon} />
@@ -317,6 +324,8 @@ export default function TransactionsScreen() {
           )
         }
         </ScrollView>
+          </>
+        )}
       </LinearGradient>
 
       <TransactionDetailModal

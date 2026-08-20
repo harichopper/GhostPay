@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Platform,
@@ -66,6 +67,9 @@ export default function SettingsScreen() {
   } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
+
+  const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   const isOfflineDemo = demoMode?.simulateOffline ?? false;
   const pendingCount = transactions
@@ -237,26 +241,29 @@ export default function SettingsScreen() {
   };
 
   const handleDisconnectWallet = () => {
-    Alert.alert(
-      'Disconnect Wallet',
-      'Are you sure you want to disconnect your GhostPay account? Make sure your recovery seed phrase is backed up.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Disconnect',
-          style: 'destructive',
-          onPress: async () => {
-            await disconnectWallet();
-            Toast.show({
-              type: 'info',
-              text1: 'Wallet Disconnected',
-              text2: 'Your wallet has been disconnected.'
-            });
-            router.replace('/');
-          }
-        }
-      ]
-    );
+    setIsDisconnectModalOpen(true);
+  };
+
+  const handleConfirmDisconnect = async () => {
+    try {
+      setIsDisconnecting(true);
+      await disconnectWallet();
+      setIsDisconnectModalOpen(false);
+      Toast.show({
+        type: 'info',
+        text1: 'Wallet Disconnected',
+        text2: 'Your wallet has been disconnected.'
+      });
+      router.replace('/');
+    } catch {
+      Toast.show({
+        type: 'error',
+        text1: 'Disconnect Error',
+        text2: 'Failed to disconnect wallet.'
+      });
+    } finally {
+      setIsDisconnecting(false);
+    }
   };
 
   return (
@@ -282,70 +289,75 @@ export default function SettingsScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* User Profile Card */}
-          <View style={styles.profileCard}>
-            <View style={styles.avatarWrapper}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>GP</Text>
-              </View>
-              <View style={[styles.statusBadge, { backgroundColor: isConnected ? '#12B76A' : '#F79E1B' }]} />
-            </View>
+          {/* User Profile Card & Status Banner (Only visible if wallet exists) */}
+          {Boolean(walletAddress) && (
+            <>
+              {/* User Profile Card */}
+              <View style={styles.profileCard}>
+                <View style={styles.avatarWrapper}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>GP</Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: isConnected ? '#12B76A' : '#F79E1B' }]} />
+                </View>
 
-            <View style={styles.profileDetails}>
-              <Text style={styles.profileName}>GhostPay User</Text>
-              <Pressable style={styles.addressPill} onPress={handleCopyAddress}>
-                <Text style={styles.addressText}>{formattedAddress}</Text>
-                <Ionicons name="duplicate-outline" size={14} color="#667085" style={{ marginLeft: 4 }} />
-              </Pressable>
-            </View>
+                <View style={styles.profileDetails}>
+                  <Text style={styles.profileName}>GhostPay User</Text>
+                  <Pressable style={styles.addressPill} onPress={handleCopyAddress}>
+                    <Text style={styles.addressText}>{formattedAddress}</Text>
+                    <Ionicons name="duplicate-outline" size={14} color="#667085" style={{ marginLeft: 4 }} />
+                  </Pressable>
+                </View>
 
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="shield-checkmark" size={18} color={colors.secondary} />
-            </View>
-          </View>
-
-          {/* Network & Offline Status Banner */}
-          <View style={styles.statusCard}>
-            <View style={styles.statusRow}>
-              <View style={styles.statusLeft}>
-                <Ionicons
-                  name={isOfflineDemo ? 'cloud-offline' : 'globe'}
-                  size={22}
-                  color={isOfflineDemo ? '#F79E1B' : '#12B76A'}
-                />
-                <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.statusTitle}>
-                    {isOfflineDemo ? 'Offline Mode (Simulation)' : 'Algorand Testnet Connected'}
-                  </Text>
-                  <Text style={styles.statusSubtitle}>
-                    {pendingCount > 0
-                      ? `${pendingCount} transaction(s) pending sync`
-                      : 'Real-time node sync active'}
-                  </Text>
+                <View style={styles.verifiedBadge}>
+                  <Ionicons name="shield-checkmark" size={18} color={colors.secondary} />
                 </View>
               </View>
 
-              <Switch
-                value={isOfflineDemo}
-                onValueChange={toggleDemoOffline}
-                trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
-                thumbColor={colors.white}
-              />
-            </View>
+              {/* Network & Offline Status Banner */}
+              <View style={styles.statusCard}>
+                <View style={styles.statusRow}>
+                  <View style={styles.statusLeft}>
+                    <Ionicons
+                      name={isOfflineDemo ? 'cloud-offline' : 'globe'}
+                      size={22}
+                      color={isOfflineDemo ? '#F79E1B' : '#12B76A'}
+                    />
+                    <View style={{ marginLeft: 12 }}>
+                      <Text style={styles.statusTitle}>
+                        {isOfflineDemo ? 'Offline Mode (Simulation)' : 'Algorand Testnet Connected'}
+                      </Text>
+                      <Text style={styles.statusSubtitle}>
+                        {pendingCount > 0
+                          ? `${pendingCount} transaction(s) pending sync`
+                          : 'Real-time node sync active'}
+                      </Text>
+                    </View>
+                  </View>
 
-            {pendingCount > 0 && (
-              <Pressable
-                style={[styles.syncButton, isSyncing && { opacity: 0.6 }]}
-                onPress={handleManualSync}
-                disabled={isSyncing}
-              >
-                <Ionicons name="sync" size={16} color={colors.primaryDark} style={{ marginRight: 6 }} />
-                <Text style={styles.syncButtonText}>
-                  {isSyncing ? 'Syncing...' : 'Sync Pending Queue Now'}
-                </Text>
-              </Pressable>
-            )}
-          </View>
+                  <Switch
+                    value={isOfflineDemo}
+                    onValueChange={toggleDemoOffline}
+                    trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
+                    thumbColor={colors.white}
+                  />
+                </View>
+
+                {pendingCount > 0 && (
+                  <Pressable
+                    style={[styles.syncButton, isSyncing && { opacity: 0.6 }]}
+                    onPress={handleManualSync}
+                    disabled={isSyncing}
+                  >
+                    <Ionicons name="sync" size={16} color={colors.primaryDark} style={{ marginRight: 6 }} />
+                    <Text style={styles.syncButtonText}>
+                      {isSyncing ? 'Syncing...' : 'Sync Pending Queue Now'}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            </>
+          )}
 
           {/* Group 1: Security & Privacy */}
           <View style={styles.sectionGroup}>
@@ -422,8 +434,8 @@ export default function SettingsScreen() {
                       {biometricEnabled
                         ? 'Active • PIN required to disable'
                         : appLockEnabled
-                        ? 'PIN and biometric verification required'
-                        : 'Enable App Lock first'}
+                          ? 'PIN and biometric verification required'
+                          : 'Enable App Lock first'}
                     </Text>
                   </View>
                 </Pressable>
@@ -442,34 +454,38 @@ export default function SettingsScreen() {
                 />
               </View>
 
-              <View style={styles.divider} />
+              {Boolean(walletAddress) && (
+                <>
+                  <View style={styles.divider} />
 
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.iconCircle, { backgroundColor: '#F0EBFB' }]}>
-                    <Ionicons name="eye-off" size={20} color="#7F56D9" />
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <View style={[styles.iconCircle, { backgroundColor: '#F0EBFB' }]}>
+                        <Ionicons name="eye-off" size={20} color="#7F56D9" />
+                      </View>
+                      <Text style={styles.settingLabel}>Ghost Stealth Mode</Text>
+                    </View>
+                    <Switch
+                      value={ghostModeEnabled}
+                      onValueChange={setGhostModeEnabled}
+                      trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
+                      thumbColor={colors.white}
+                    />
                   </View>
-                  <Text style={styles.settingLabel}>Ghost Stealth Mode</Text>
-                </View>
-                <Switch
-                  value={ghostModeEnabled}
-                  onValueChange={setGhostModeEnabled}
-                  trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
-                  thumbColor={colors.white}
-                />
-              </View>
 
-              <View style={styles.divider} />
+                  <View style={styles.divider} />
 
-              <Pressable style={styles.settingRow} onPress={() => Alert.alert('Backup Seed Phrase', 'Your 24-word recovery seed is encrypted.')}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.iconCircle, { backgroundColor: '#FEF0C7' }]}>
-                    <Ionicons name="key" size={20} color="#DC6803" />
-                  </View>
-                  <Text style={styles.settingLabel}>Backup Mnemonic Phrase</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
-              </Pressable>
+                  <Pressable style={styles.settingRow} onPress={() => Alert.alert('Backup Seed Phrase', 'Your 24-word recovery seed is encrypted.')}>
+                    <View style={styles.settingLeft}>
+                      <View style={[styles.iconCircle, { backgroundColor: '#FEF0C7' }]}>
+                        <Ionicons name="key" size={20} color="#DC6803" />
+                      </View>
+                      <Text style={styles.settingLabel}>Backup Mnemonic Phrase</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
+                  </Pressable>
+                </>
+              )}
             </View>
           </View>
 
@@ -527,19 +543,23 @@ export default function SettingsScreen() {
                 <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
               </Pressable>
 
-              <View style={styles.divider} />
+              {Boolean(walletAddress) && (
+                <>
+                  <View style={styles.divider} />
 
-              <Pressable style={styles.settingRow} onPress={handleDisconnectWallet}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.iconCircle, { backgroundColor: '#FEE4E2' }]}>
-                    <Ionicons name="log-out" size={20} color="#D92D20" />
-                  </View>
-                  <Text style={[styles.settingLabel, { color: '#D92D20', fontFamily: 'Inter_700Bold' }]}>
-                    Disconnect Wallet
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#D92D20" />
-              </Pressable>
+                  <Pressable style={styles.settingRow} onPress={handleDisconnectWallet}>
+                    <View style={styles.settingLeft}>
+                      <View style={[styles.iconCircle, { backgroundColor: '#FEE4E2' }]}>
+                        <Ionicons name="log-out" size={20} color="#D92D20" />
+                      </View>
+                      <Text style={[styles.settingLabel, { color: '#D92D20', fontFamily: 'Inter_700Bold' }]}>
+                        Disconnect Wallet
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#D92D20" />
+                  </Pressable>
+                </>
+              )}
             </View>
           </View>
 
@@ -608,6 +628,53 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
+      {/* Custom Styled Disconnect Confirmation Modal */}
+      <Modal
+        visible={isDisconnectModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsDisconnectModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View entering={ZoomIn.duration(350).springify()} style={styles.disconnectModalCard}>
+            <View style={styles.disconnectIconBadge}>
+              <Ionicons name="log-out-outline" size={28} color="#D92D20" />
+            </View>
+
+            <Text style={styles.disconnectModalTitle}>Disconnect Wallet?</Text>
+
+            <Text style={styles.disconnectModalSub}>
+              Are you sure you want to disconnect your active wallet? Make sure you have saved your 25-word recovery seed phrase to re-import it.
+            </Text>
+
+            <View style={styles.disconnectActionsRow}>
+              <Pressable
+                style={styles.disconnectCancelBtn}
+                onPress={() => setIsDisconnectModalOpen(false)}
+                disabled={isDisconnecting}
+              >
+                <Text style={styles.disconnectCancelText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.disconnectConfirmBtn}
+                onPress={handleConfirmDisconnect}
+                disabled={isDisconnecting}
+              >
+                {isDisconnecting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="log-out" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.disconnectConfirmText}>Disconnect</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
+
       {/* Passcode / PIN Keypad Modal */}
       <Modal
         visible={isPinModalOpen}
@@ -636,25 +703,25 @@ export default function SettingsScreen() {
               {pinStep === 'create'
                 ? 'Set 4-Digit Security PIN'
                 : pinStep === 'confirmCreate'
-                ? 'Confirm Your Security PIN'
-                : pinStep === 'verifyCurrentForChange'
-                ? 'Verify Current PIN'
-                : pinStep === 'createChange'
-                ? 'Set New Security PIN'
-                : pinStep === 'confirmChange'
-                ? 'Confirm New Security PIN'
-                : pinStep === 'disableLock'
-                ? 'Disable App Lock'
-                : pinStep === 'enableBiometric'
-                ? 'Verify PIN to Enable Biometrics'
-                : 'Verify PIN to Disable Biometrics'}
+                  ? 'Confirm Your Security PIN'
+                  : pinStep === 'verifyCurrentForChange'
+                    ? 'Verify Current PIN'
+                    : pinStep === 'createChange'
+                      ? 'Set New Security PIN'
+                      : pinStep === 'confirmChange'
+                        ? 'Confirm New Security PIN'
+                        : pinStep === 'disableLock'
+                          ? 'Disable App Lock'
+                          : pinStep === 'enableBiometric'
+                            ? 'Verify PIN to Enable Biometrics'
+                            : 'Verify PIN to Disable Biometrics'}
             </Text>
             <Text style={styles.pinModalSub}>
               {pinStep === 'create'
                 ? 'Enter a 4-digit code to lock GhostPay'
                 : pinStep === 'confirmCreate' || pinStep === 'confirmChange'
-                ? 'Re-enter your 4-digit PIN to confirm'
-                : 'Enter your current 4-digit PIN to continue'}
+                  ? 'Re-enter your 4-digit PIN to confirm'
+                  : 'Enter your current 4-digit PIN to continue'}
             </Text>
 
             {/* 4 Passcode Dots */}
@@ -886,12 +953,13 @@ const styles = StyleSheet.create({
     marginBottom: 20
   },
   groupHeaderTitle: {
-    color: '#5C768D',
+    color: '#475765ff',
     fontSize: 11,
     fontFamily: 'Inter_700Bold',
     letterSpacing: 0.2,
-    marginBottom: 8,
-    marginLeft: 4
+    marginTop: 10,
+    marginBottom: 15,
+    marginLeft: 10
   },
   settingsCard: {
     backgroundColor: '#FFFFFF',
@@ -1255,5 +1323,85 @@ const styles = StyleSheet.create({
   },
   optionNameSelected: {
     color: colors.primaryDark
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(23, 43, 62, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20
+  },
+  disconnectModalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16
+  },
+  disconnectIconBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FEE4E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16
+  },
+  disconnectModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Orbitron_700Bold',
+    color: '#101828',
+    textAlign: 'center',
+    marginBottom: 8
+  },
+  disconnectModalSub: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: '#667085',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24
+  },
+  disconnectActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    gap: 12
+  },
+  disconnectCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#F2F4F7',
+    borderWidth: 1,
+    borderColor: '#D0D5DD',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  disconnectCancelText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#344054'
+  },
+  disconnectConfirmBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#D92D20',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2
+  },
+  disconnectConfirmText: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#FFFFFF'
   }
 });
