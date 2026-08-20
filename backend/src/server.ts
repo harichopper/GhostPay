@@ -36,7 +36,13 @@ if (!isProduction && !env.accountsApiKey) {
 app.use(cors({ origin: env.corsOrigin }));
 app.use(express.json());
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCssUrl: 'https://unpkg.com/swagger-ui-dist@5/swagger-ui.css',
+  customJs: [
+    'https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js',
+    'https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js'
+  ]
+}));
 
 app.get('/', (_request, response) => {
   response.json({ ok: true, service: 'ghostpay-backend', status: 'running' });
@@ -60,6 +66,11 @@ app.use(
   swaggerUi.serve,
   swaggerUi.setup(openApiSpec, {
     customSiteTitle: 'GhostPay API Docs',
+    customCssUrl: 'https://unpkg.com/swagger-ui-dist@5/swagger-ui.css',
+    customJs: [
+      'https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js',
+      'https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js'
+    ],
     swaggerOptions: {
       persistAuthorization: true,
       displayRequestDuration: true,
