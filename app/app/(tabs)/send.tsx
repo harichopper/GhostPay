@@ -108,7 +108,7 @@ function getDynamicRecentContacts(transactions: GhostTransaction[], currentWalle
 
 export default function SendScreen() {
   const router = useRouter();
-  const { walletAddress, balanceAlgo, enqueueOfflinePayment, isConnected, transactions } = useWalletStore();
+  const { walletAddress, balanceAlgo, enqueueOfflinePayment, isConnected, transactions, displayCurrency, algoRates } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
 
@@ -121,7 +121,7 @@ export default function SendScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
-  const [currencyMode, setCurrencyMode] = useState<'USD' | 'ALGO'>('USD');
+  const [currencyMode, setCurrencyMode] = useState<'FIAT' | 'ALGO'>('FIAT');
   const [isFlashOn, setIsFlashOn] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scanKey, setScanKey] = useState(0);
@@ -307,16 +307,22 @@ export default function SendScreen() {
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
 
   const handleSendPayment = async () => {
+    if (isSubmitting) return;
+
     if (!recipient.trim()) {
       setErrorModalMessage('Please enter a mobile number or wallet address.');
       return;
     }
 
-    const numericAmount = parseFloat(amount);
-    if (isNaN(numericAmount) || numericAmount <= 0) {
+    const inputAmount = parseFloat(amount);
+    if (isNaN(inputAmount) || inputAmount <= 0) {
       setErrorModalMessage('Please enter a valid amount to send.');
       return;
     }
+
+    const currentCurrency = displayCurrency || 'USD';
+    const rate = algoRates?.[currentCurrency] || (currentCurrency === 'INR' ? 15.25 : currentCurrency === 'EUR' ? 0.165 : 0.18);
+    const numericAmount = currencyMode === 'FIAT' ? inputAmount / rate : inputAmount;
 
     setIsSubmitting(true);
 
@@ -328,36 +334,31 @@ export default function SendScreen() {
       setProcessingStatus('x402 Micro-Fee: Deducting 0.005 ALGO...');
       await enqueueOfflinePayment(X402_MERCHANT_VAULT, 0.005);
 
-      // x402 Security Check 1: Merchant & Receiver Validation ($0.005)
-      setProcessingStatus('1/3 x402: Validating Merchant Identity...');
-      const merchantCheck = await validateReceiverMerchant(targetAddress, walletAddress);
+      // Step 2: Parallel x402 Security Verification (All 3 API checks run concurrently)
+      setProcessingStatus('Verifying x402 AI Security Shield...');
+      const [merchantCheck, riskAssessment, fraudCheck] = await Promise.all([
+        validateReceiverMerchant(targetAddress, walletAddress),
+        fetchWalletRiskScore(walletAddress, targetAddress),
+        analyzeTransactionFraud({
+          senderWallet: walletAddress,
+          receiverWallet: targetAddress,
+          amount: numericAmount,
+          asset: currencyMode === 'FIAT' ? (displayCurrency || 'USD') : 'ALGO'
+        })
+      ]);
+
       if (merchantCheck && merchantCheck.data && merchantCheck.data.merchantVerified === false) {
         throw new Error('Security Alert: Unverified or flagged receiver merchant identity.');
       }
-
-      // x402 Security Check 2: Wallet Threat & Risk Scan ($0.005)
-      setProcessingStatus('2/3 x402: Scanning Threat Score & Wallet Risk...');
-      const riskAssessment = await fetchWalletRiskScore(walletAddress, targetAddress);
       if (riskAssessment && riskAssessment.data && riskAssessment.data.canMakePayment === false) {
         throw new Error(`Security Alert: High risk detected for recipient. Risk score: ${riskAssessment.data.riskScore}/10.`);
       }
-
-      // x402 Security Check 3: Invoice & Payment Fraud Analysis ($0.10)
-      setProcessingStatus('3/3 x402: Running Pre-flight Fraud Analysis...');
-      const fraudCheck = await analyzeTransactionFraud({
-        senderWallet: walletAddress,
-        receiverWallet: targetAddress,
-        amount: numericAmount,
-        asset: currencyMode
-      });
       if (fraudCheck && fraudCheck.data && fraudCheck.data.recommendation === 'REJECT') {
         throw new Error('Security Alert: Fraud detector flagged this payment as suspicious.');
       }
 
       // Final Step: Executing Main Payment Transfer on Algorand Blockchain
-      setProcessingStatus(`Executing ${numericAmount} ${currencyMode} Transfer...`);
-      await new Promise((res) => setTimeout(res, 500));
-
+      setProcessingStatus('Processing Algorand Payment...');
       await enqueueOfflinePayment(targetAddress, numericAmount);
 
       Toast.show({
@@ -582,17 +583,19 @@ export default function SendScreen() {
                       <Text style={styles.inputLabel}>AMOUNT</Text>
                       <Pressable
                         style={styles.currencyTogglePill}
-                        onPress={() => setCurrencyMode(currencyMode === 'USD' ? 'ALGO' : 'USD')}
+                        onPress={() => setCurrencyMode(currencyMode === 'FIAT' ? 'ALGO' : 'FIAT')}
                       >
                         <Text style={styles.currencyToggleText}>
-                          Mode: <Text style={{ color: colors.secondary, fontWeight: '700' }}>{currencyMode}</Text>
+                          Mode: <Text style={{ color: colors.secondary, fontWeight: '700' }}>{currencyMode === 'FIAT' ? (displayCurrency || 'USD') : 'ALGO'}</Text>
                         </Text>
                       </Pressable>
                     </View>
 
                     <View style={styles.amountDisplayCard}>
                       <Text style={[styles.currencyPrefix, currencyMode === 'ALGO' && { fontSize: 22 }]}>
-                        {currencyMode === 'USD' ? '$' : 'ALGO'}
+                        {currencyMode === 'FIAT'
+                          ? (displayCurrency === 'INR' ? '₹' : displayCurrency === 'EUR' ? '€' : '$')
+                          : 'ALGO'}
                       </Text>
                       <TextInput
                         style={styles.amountInput}
@@ -604,6 +607,17 @@ export default function SendScreen() {
                       />
                     </View>
 
+                    {/* Dynamic Conversion Subtitle */}
+                    {Boolean(amount && !isNaN(parseFloat(amount)) && parseFloat(amount) > 0) && (
+                      <View style={{ marginTop: 6, alignSelf: 'flex-start', paddingHorizontal: 4 }}>
+                        <Text style={{ fontSize: 13, color: '#027A48', fontWeight: '600' }}>
+                          {currencyMode === 'FIAT'
+                            ? `≈ ${(parseFloat(amount) / (algoRates?.[displayCurrency || 'USD'] || (displayCurrency === 'INR' ? 15.25 : displayCurrency === 'EUR' ? 0.165 : 0.18))).toFixed(3)} ALGO on-chain`
+                            : `≈ ${(displayCurrency === 'INR' ? '₹' : displayCurrency === 'EUR' ? '€' : '$')}${(parseFloat(amount) * (algoRates?.[displayCurrency || 'USD'] || (displayCurrency === 'INR' ? 15.25 : displayCurrency === 'EUR' ? 0.165 : 0.18))).toFixed(2)} ${displayCurrency || 'USD'}`}
+                        </Text>
+                      </View>
+                    )}
+
                     {/* Preset Amount Chips */}
                     <View style={styles.presetChipsRow}>
                       {['10', '25', '50', '100'].map((val) => (
@@ -612,12 +626,12 @@ export default function SendScreen() {
                           style={styles.chip}
                           onPress={() => setAmount(val)}
                         >
-                          <Text style={styles.chipText}>+${val}</Text>
+                          <Text style={styles.chipText}>+{currencyMode === 'FIAT' ? (displayCurrency === 'INR' ? '₹' : displayCurrency === 'EUR' ? '€' : '$') : ''}{val}</Text>
                         </Pressable>
                       ))}
                       <Pressable
                         style={[styles.chip, styles.maxChip]}
-                        onPress={() => setAmount(balanceAlgo ? balanceAlgo.toFixed(2) : '100')}
+                        onPress={() => setAmount(balanceAlgo ? (currencyMode === 'FIAT' ? (balanceAlgo * (algoRates?.[displayCurrency || 'USD'] || (displayCurrency === 'INR' ? 15.25 : displayCurrency === 'EUR' ? 0.165 : 0.18))).toFixed(2) : balanceAlgo.toFixed(2)) : '100')}
                       >
                         <Text style={styles.maxChipText}>MAX</Text>
                       </Pressable>
