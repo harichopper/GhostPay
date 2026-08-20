@@ -297,15 +297,17 @@ export default function SendScreen() {
     }
   };
 
+  const [errorModalMessage, setErrorModalMessage] = useState<string | null>(null);
+
   const handleSendPayment = async () => {
     if (!recipient.trim()) {
-      Alert.alert('Missing Recipient', 'Please enter a mobile number or wallet address.');
+      setErrorModalMessage('Please enter a mobile number or wallet address.');
       return;
     }
 
     const numericAmount = parseFloat(amount);
     if (isNaN(numericAmount) || numericAmount <= 0) {
-      Alert.alert('Invalid Amount', 'Please enter a valid amount to send.');
+      setErrorModalMessage('Please enter a valid amount to send.');
       return;
     }
 
@@ -320,7 +322,7 @@ export default function SendScreen() {
       setAmount('');
       setRecipient('');
     } catch (err: any) {
-      Alert.alert('Payment Error', err?.message || 'Failed to process payment.');
+      setErrorModalMessage(err?.message || 'Failed to process payment.');
     } finally {
       setIsSubmitting(false);
     }
@@ -619,6 +621,57 @@ export default function SendScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Custom Payment Error Alert Modal */}
+      <Modal
+        visible={Boolean(errorModalMessage)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setErrorModalMessage(null)}
+      >
+        <View style={styles.errorModalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setErrorModalMessage(null)} />
+          <View style={styles.errorModalCard}>
+            <View style={styles.errorIconBadge}>
+              <Ionicons name="warning" size={32} color="#D92D20" />
+            </View>
+
+            <Text style={styles.errorModalTitle}>
+              {errorModalMessage?.includes('Watch-Only') ? 'Watch-Only Account' : 'Payment Error'}
+            </Text>
+            <Text style={styles.errorModalBody}>{errorModalMessage}</Text>
+
+            {errorModalMessage?.includes('Watch-Only') ? (
+              <>
+                <Pressable
+                  style={styles.primaryModalBtnAction}
+                  onPress={() => {
+                    setErrorModalMessage(null);
+                    router.push('/settings');
+                  }}
+                >
+                  <Ionicons name="key-outline" size={18} color="#172B3E" style={{ marginRight: 8 }} />
+                  <Text style={styles.primaryModalBtnActionText}>Import 25-Word Mnemonic</Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.secondaryModalBtnAction}
+                  onPress={() => setErrorModalMessage(null)}
+                >
+                  <Text style={styles.secondaryModalBtnActionText}>Cancel</Text>
+                </Pressable>
+              </>
+            ) : (
+              <Pressable
+                style={styles.errorModalBtn}
+                onPress={() => setErrorModalMessage(null)}
+              >
+                <Text style={styles.errorModalBtnText}>Got it</Text>
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1120,5 +1173,94 @@ const styles = StyleSheet.create({
     color: colors.primaryDark,
     fontSize: 16,
     fontFamily: 'Inter_700Bold'
+  },
+  /* Error Alert Modal Styles */
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject
+  },
+  errorModalOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(23, 43, 62, 0.65)',
+    paddingHorizontal: 24,
+    zIndex: 100000,
+    elevation: 100000
+  },
+  errorModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 20,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20
+  },
+  errorIconBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FEF3F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14
+  },
+  errorModalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter_700Bold',
+    color: '#101828',
+    textAlign: 'center'
+  },
+  errorModalBody: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: '#667085',
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 20,
+    lineHeight: 20
+  },
+  errorModalBtn: {
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#D92D20',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  errorModalBtnText: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#FFFFFF'
+  },
+  primaryModalBtnAction: {
+    flexDirection: 'row',
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#05DA93',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8
+  },
+  primaryModalBtnActionText: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#172B3E'
+  },
+  secondaryModalBtnAction: {
+    width: '100%',
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  secondaryModalBtnActionText: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#667085'
   }
 });

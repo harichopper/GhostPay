@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import algosdk from 'algosdk';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -14,12 +15,15 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   useWindowDimensions,
   View
 } from 'react-native';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import Toast, { ToastConfigParams } from 'react-native-toast-message';
 import PendingQueueModal from '../../src/components/PendingQueueModal';
+import { MnemonicBackupModal } from '../../src/components/MnemonicBackupModal';
+import { loadWalletSecretKey } from '../../src/storage/walletSecretStorage';
 import { useSecurityStore } from '../../src/store/securityStore';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
@@ -57,12 +61,16 @@ export default function SettingsScreen() {
   const router = useRouter();
   const {
     walletAddress,
+    wallets,
+    setWalletAddress,
     isConnected,
     demoMode,
     toggleDemoOffline,
     syncPendingTransactions,
     transactions,
     disconnectWallet,
+    importWalletFromMnemonic,
+    generateWalletAddress,
     displayCurrency,
     setDisplayCurrency,
     userName
@@ -88,6 +96,127 @@ export default function SettingsScreen() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
   const [isPendingQueueModalOpen, setIsPendingQueueModalOpen] = useState(false);
+
+  // Wallet Import & Backup states
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importInput, setImportInput] = useState('');
+  const [importLabel, setImportLabel] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [backupMnemonic, setBackupMnemonic] = useState('');
+
+  const handleOpenImportModal = () => {
+    setImportInput('');
+    setImportLabel('');
+    setIsImportModalOpen(true);
+  };
+
+  const handleExecuteImport = async () => {
+    if (!importInput.trim()) {
+      Toast.show({ type: 'error', text1: 'Missing Input', text2: 'Please enter your 25-word seed phrase or address.' });
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const res = await importWalletFromMnemonic(importInput, importLabel);
+      if (res.success) {
+        setIsImportModalOpen(false);
+        Toast.show({
+          type: 'success',
+          text1: 'Wallet Imported!',
+          text2: `Active address: ${res.address?.slice(0, 10)}...`
+        });
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Import Failed',
+          text2: res.error || 'Invalid seed phrase or address'
+        });
+      }
+    } catch (err: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Import Failed',
+        text2: err?.message || 'Failed to import wallet'
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleOpenBackupModal = async () => {
+    if (!walletAddress) {
+      Toast.show({ type: 'error', text1: 'No Active Wallet', text2: 'Please create or import a wallet first.' });
+      return;
+    }
+
+    try {
+      const sk = await loadWalletSecretKey(walletAddress);
+      if (!sk) {
+        setImportInput('');
+        setIsImportModalOpen(true);
+        Toast.show({
+          type: 'info',
+          text1: 'Watch-Only Account',
+          text2: 'Enter the 25-word secret seed phrase for this address to activate backup & full sending power.'
+        });
+        return;
+      }
+      const phrase = algosdk.secretKeyToMnemonic(sk);
+      setBackupMnemonic(phrase);
+      setIsBackupModalOpen(true);
+    } catch {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Could not load secret phrase.' });
+    }
+  };
+
+  const [pendingGeneratedMnemonic, setPendingGeneratedMnemonic] = useState<string | null>(null);
+
+  const handleGenerateNewWallet = async () => {
+    try {
+      const { mnemonic } = await generateWalletAddress();
+      setBackupMnemonic(mnemonic);
+      setPendingGeneratedMnemonic(mnemonic);
+      setIsBackupModalOpen(true);
+      Toast.show({
+        type: 'info',
+        text1: 'Mnemonic Generated',
+        text2: 'Complete 3-word verification to activate wallet.'
+      });
+    } catch {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Could not generate new wallet.' });
+    }
+  };
+
+  const handleBackupModalCancel = () => {
+    if (pendingGeneratedMnemonic) {
+      setPendingGeneratedMnemonic(null);
+      Toast.show({
+        type: 'info',
+        text1: 'Wallet Creation Cancelled',
+        text2: 'Verification incomplete. No wallet was created.'
+      });
+    }
+    setIsBackupModalOpen(false);
+  };
+
+  const handleBackupModalDone = async () => {
+    if (pendingGeneratedMnemonic) {
+      const res = await importWalletFromMnemonic(pendingGeneratedMnemonic);
+      setPendingGeneratedMnemonic(null);
+      if (res.success) {
+        Toast.show({
+          type: 'success',
+          text1: 'Wallet Verified & Created!',
+          text2: `Active address: ${res.address?.slice(0, 10)}...`
+        });
+      } else {
+        Toast.show({ type: 'error', text1: 'Activation Failed', text2: res.error || 'Could not activate wallet.' });
+      }
+    }
+    setIsBackupModalOpen(false);
+  };
 
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [enteredPin, setEnteredPin] = useState('');
@@ -398,6 +527,65 @@ export default function SettingsScreen() {
             </>
           )}
 
+          {/* Group 0: Wallets & Key Management */}
+          <View style={styles.sectionGroup}>
+            <Text style={styles.groupHeaderTitle}>WALLETS & KEY MANAGEMENT</Text>
+
+            <View style={styles.settingsCard}>
+              {/* Row 1: Import Wallet with 25-Word Mnemonic or Address */}
+              <Pressable style={styles.settingRow} onPress={handleOpenImportModal}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconCircle, { backgroundColor: '#E4F2EB' }]}>
+                    <Ionicons name="download-outline" size={20} color="#12B76A" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingLabel}>Import Wallet / Seed Phrase</Text>
+                    <Text style={styles.settingSubLabel} numberOfLines={1}>
+                      Import 25-word seed phrase or address
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
+              </Pressable>
+
+              <View style={styles.divider} />
+
+              {/* Row 2: Backup Secret Mnemonic */}
+              <Pressable style={styles.settingRow} onPress={handleOpenBackupModal}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconCircle, { backgroundColor: '#FEF3F2' }]}>
+                    <Ionicons name="shield-checkmark-outline" size={20} color="#D92D20" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingLabel}>Backup 25-Word Mnemonic</Text>
+                    <Text style={styles.settingSubLabel} numberOfLines={1}>
+                      Reveal & save your 25-word recovery key
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
+              </Pressable>
+
+              <View style={styles.divider} />
+
+              {/* Row 3: Generate New Wallet */}
+              <Pressable style={styles.settingRow} onPress={handleGenerateNewWallet}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconCircle, { backgroundColor: '#F0EBFB' }]}>
+                    <Ionicons name="add-circle-outline" size={20} color="#7F56D9" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingLabel}>Generate New Wallet</Text>
+                    <Text style={styles.settingSubLabel} numberOfLines={1}>
+                      Create a new Algorand TestNet account
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
+              </Pressable>
+            </View>
+          </View>
+
           {/* Group 1: Security & Privacy */}
           <View style={styles.sectionGroup}>
             <Text style={styles.groupHeaderTitle}>SECURITY & PRIVACY</Text>
@@ -680,6 +868,81 @@ export default function SettingsScreen() {
           </Animated.View>
         </View>
       </Modal>
+
+      {/* Import Wallet Modal */}
+      <Modal
+        visible={isImportModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsImportModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View entering={ZoomIn.duration(350).springify()} style={styles.importModalCard}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalTitleGroup}>
+                <View style={styles.modalIconCircleGreen}>
+                  <Ionicons name="download-outline" size={22} color="#12B76A" />
+                </View>
+                <View>
+                  <Text style={styles.importModalTitle}>Import Algorand Wallet</Text>
+                  <Text style={styles.importModalSub}>Enter 25-word secret seed phrase or address</Text>
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.inputFieldLabel}>25-Word Secret Seed Phrase or Address:</Text>
+            <TextInput
+              style={styles.importTextInput}
+              multiline
+              numberOfLines={4}
+              placeholder="e.g. apple banana cherry zebra... OR 26SEOQY3..."
+              placeholderTextColor="#98A2B3"
+              value={importInput}
+              onChangeText={setImportInput}
+            />
+
+            <Text style={styles.inputFieldLabel}>Wallet Label (Optional):</Text>
+            <TextInput
+              style={styles.labelTextInput}
+              placeholder="e.g. Primary Savings"
+              placeholderTextColor="#98A2B3"
+              value={importLabel}
+              onChangeText={setImportLabel}
+            />
+
+            <Pressable
+              style={[styles.primaryImportBtn, (!importInput.trim() || isImporting) && { opacity: 0.5 }]}
+              disabled={!importInput.trim() || isImporting}
+              onPress={handleExecuteImport}
+            >
+              {isImporting ? (
+                <ActivityIndicator size="small" color="#172B3E" />
+              ) : (
+                <>
+                  <Ionicons name="key-outline" size={18} color="#172B3E" style={{ marginRight: 8 }} />
+                  <Text style={styles.primaryImportBtnText}>Import Wallet Now</Text>
+                </>
+              )}
+            </Pressable>
+
+            <Pressable style={styles.secondaryModalBtnAction} onPress={() => setIsImportModalOpen(false)}>
+              <Text style={styles.secondaryModalBtnActionText}>Cancel</Text>
+            </Pressable>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Secret Mnemonic Backup Modal Component */}
+      <MnemonicBackupModal
+        visible={isBackupModalOpen}
+        mnemonic={backupMnemonic}
+        onCopy={() => {
+          void Clipboard.setStringAsync(backupMnemonic);
+          Toast.show({ type: 'success', text1: 'Copied to Clipboard', text2: 'Secret 25-word phrase copied securely.' });
+        }}
+        onDone={handleBackupModalDone}
+        onCancel={handleBackupModalCancel}
+      />
 
       {/* Passcode / PIN Keypad Modal */}
       <Modal
@@ -1006,7 +1269,9 @@ const styles = StyleSheet.create({
   },
   settingLeft: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8
   },
   iconCircle: {
     width: 38,
@@ -1429,5 +1694,111 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter_700Bold',
     color: '#FFFFFF'
+  },
+  /* Import Modal Styles */
+  importModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    elevation: 10,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16
+  },
+  modalTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  modalIconCircleGreen: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#E4F2EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12
+  },
+  modalCloseBtnCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  importModalTitle: {
+    fontSize: 17,
+    fontFamily: 'Inter_700Bold',
+    color: '#101828'
+  },
+  importModalSub: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: '#667085',
+    marginTop: 2
+  },
+  inputFieldLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#344054',
+    marginBottom: 6,
+    marginTop: 10
+  },
+  importTextInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 12,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#101828',
+    borderWidth: 1,
+    borderColor: '#D0D5DD',
+    minHeight: 90,
+    textAlignVertical: 'top'
+  },
+  labelTextInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 12,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#101828',
+    borderWidth: 1,
+    borderColor: '#D0D5DD'
+  },
+  primaryImportBtn: {
+    flexDirection: 'row',
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: '#05DA93',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20
+  },
+  primaryImportBtnText: {
+    fontSize: 15,
+    fontFamily: 'Inter_700Bold',
+    color: '#172B3E'
+  },
+  secondaryModalBtnAction: {
+    width: '100%',
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8
+  },
+  secondaryModalBtnActionText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#667085'
   }
 });

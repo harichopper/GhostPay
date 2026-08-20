@@ -15,16 +15,29 @@ type MnemonicBackupModalProps = {
   mnemonic: string;
   onCopy: () => void;
   onDone: () => void;
+  onCancel?: () => void;
 };
 
 export function MnemonicBackupModal({
   visible,
   mnemonic,
   onCopy,
-  onDone
+  onDone,
+  onCancel
 }: MnemonicBackupModalProps) {
   const [step, setStep] = useState<'reveal' | 'verify'>('reveal');
   const [copied, setCopied] = useState(false);
+
+  const handleClose = () => {
+    setStep('reveal');
+    setSelectedWords([null, null, null]);
+    setErrorMessage(null);
+    if (onCancel) {
+      onCancel();
+    } else {
+      onDone();
+    }
+  };
 
   // Parse words array
   const words = useMemo(() => {
@@ -107,7 +120,7 @@ export function MnemonicBackupModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDone}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <View style={styles.backdrop}>
         <View style={styles.card}>
           {/* Top Step Progress Bar */}
@@ -154,6 +167,10 @@ export function MnemonicBackupModal({
 
               {/* Step 1 Actions */}
               <View style={styles.actionsRow}>
+                <Pressable style={styles.cancelModalButton} onPress={handleClose}>
+                  <Text style={styles.cancelModalButtonText}>Cancel</Text>
+                </Pressable>
+
                 <Pressable
                   style={styles.primaryActionButton}
                   onPress={() => {
@@ -281,17 +298,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)',
     backgroundColor: '#FFFFFF',
-    padding: 20,
-    elevation: 10,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16
+    paddingTop: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    elevation: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.35,
+    shadowRadius: 20,
+    position: 'relative'
+  },
+  closeBtnCircle: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10
   },
   progressBarRow: {
     flexDirection: 'row',
     gap: 8,
-    marginBottom: 16
+    marginBottom: 20
   },
   progressStep: {
     flex: 1,
@@ -349,35 +381,35 @@ const styles = StyleSheet.create({
   wordsGridContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
     justifyContent: 'space-between',
     backgroundColor: '#F8FAFC',
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E2E8F0',
-    padding: 12,
+    padding: 10,
     marginBottom: 16
   },
   wordChip: {
-    width: '31%',
+    width: '31.5%',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#CBD5E1',
     paddingVertical: 8,
-    paddingHorizontal: 8
+    paddingHorizontal: 4
   },
   wordIndex: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: 'Inter_600SemiBold',
     color: '#94A3B8',
-    marginRight: 4,
-    minWidth: 20
+    marginRight: 3
   },
   wordText: {
-    fontSize: 13,
+    fontSize: 11.5,
     fontFamily: 'Inter_700Bold',
     color: '#0F172A'
   },
@@ -538,5 +570,20 @@ const styles = StyleSheet.create({
     fontFamily: 'Orbitron_700Bold',
     fontSize: 13,
     letterSpacing: 0.4
+  },
+  cancelModalButton: {
+    height: 48,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#CBD5E1'
+  },
+  cancelModalButtonText: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#64748B'
   }
 });

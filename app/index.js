@@ -1,10 +1,29 @@
 import 'react-native-get-random-values';
+
+// Polyfill crypto and getRandomValues across all global scopes for algosdk & crypto operations
 if (typeof globalThis.crypto === 'undefined') {
-  globalThis.crypto = global.crypto || {};
+  globalThis.crypto = {};
 }
-if (global.crypto && !globalThis.crypto.getRandomValues) {
+if (typeof global.crypto === 'undefined') {
+  global.crypto = globalThis.crypto;
+}
+
+if (!globalThis.crypto.getRandomValues && typeof global.crypto.getRandomValues === 'function') {
   globalThis.crypto.getRandomValues = global.crypto.getRandomValues;
 }
+if (!global.crypto.getRandomValues && typeof globalThis.crypto.getRandomValues === 'function') {
+  global.crypto.getRandomValues = globalThis.crypto.getRandomValues;
+}
+
+if (typeof window !== 'undefined') {
+  if (typeof window.crypto === 'undefined') {
+    window.crypto = globalThis.crypto;
+  }
+  if (!window.crypto.getRandomValues && globalThis.crypto.getRandomValues) {
+    window.crypto.getRandomValues = globalThis.crypto.getRandomValues;
+  }
+}
+
 import { Buffer } from 'buffer';
 
 class CustomTextDecoder {

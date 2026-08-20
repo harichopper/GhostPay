@@ -303,14 +303,6 @@ export const useWalletStore = create<WalletState>()(
         const account = algosdk.generateAccount();
         const walletAddress = account.addr.toString();
         const mnemonic = algosdk.secretKeyToMnemonic(account.sk);
-
-        await saveWalletSecretKey(walletAddress, account.sk);
-        await savePendingMnemonic(walletAddress, mnemonic);
-
-        set((state) => ({
-          walletAddress,
-          wallets: upsertWallet(state.wallets, walletAddress)
-        }));
         return { address: walletAddress, mnemonic };
       },
 
@@ -385,6 +377,11 @@ export const useWalletStore = create<WalletState>()(
 
         if (!walletAddress) {
           throw new Error('Set sender wallet address first');
+        }
+
+        const secretKey = await loadWalletSecretKey(walletAddress);
+        if (!secretKey) {
+          throw new Error('This account is Watch-Only (imported by Address). To send payments, please re-import this wallet using your 25-word secret seed phrase.');
         }
 
         if (amount <= 0 || Number.isNaN(amount)) {
@@ -465,6 +462,10 @@ export const useWalletStore = create<WalletState>()(
                 });
               }
 
+              if (!signedTxnBase64) {
+                throw new Error('Wallet secret key missing. Please re-import wallet using 25-word seed phrase.');
+              }
+
               const response = await sendTransactionToAlgorand({
                 sender: tx.sender,
                 receiver: tx.receiver,
@@ -477,12 +478,14 @@ export const useWalletStore = create<WalletState>()(
               explorerUrl = response.explorerUrl;
               network = response.network;
               contractVerified = Boolean(response.contractVerified);
-            } catch {
-              // Fallback for offline vault broadcast confirmation
-              txId = `GHOST-TX-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;
-              explorerUrl = `${get().explorerTxBaseUrl}${txId}`;
-              network = 'testnet';
-              contractVerified = true;
+            } catch (err: any) {
+              set((current) => ({
+                transactions: withUpdatedTransaction(current.transactions, tx.id, {
+                  status: 'failed',
+                  error: err?.message || 'Broadcast failed on Algorand network'
+                })
+              }));
+              continue;
             }
 
             set((current) => ({

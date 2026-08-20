@@ -1,3 +1,4 @@
+import '../index.js';
 import 'react-native-get-random-values';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -14,7 +15,12 @@ import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
-import { AppState, AppStateStatus, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, AppStateStatus, Image, LogBox, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+
+LogBox.ignoreLogs([
+  "It looks like you're running in react-native",
+  "In order to perform common crypto operations you will need to polyfill"
+]);
 
 SplashScreen.preventAutoHideAsync().catch(() => { });
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -90,10 +96,10 @@ export default function RootLayout() {
     const loaderTimer = setTimeout(() => {
       setIsAppLoading(false);
       void SplashScreen.hideAsync().catch(() => { });
-    }, 600);
+    }, 500);
 
     return () => clearTimeout(loaderTimer);
-  }, []);
+  }, [fontsLoaded]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -266,7 +272,7 @@ export default function RootLayout() {
 
   if (!fontsLoaded) {
     return (
-      <View style={splashStyles.fullScreenOverlay}>
+      <Pressable style={splashStyles.fullScreenOverlay} onPress={() => void SplashScreen.hideAsync().catch(() => { })}>
         <StatusBar style="light" />
         <Image
           source={require('../assets/branding/ghostpay-logo.png')}
@@ -274,7 +280,7 @@ export default function RootLayout() {
           resizeMode="contain"
         />
         <Text style={splashStyles.connectingTextFallback}>Connecting...</Text>
-      </View>
+      </Pressable>
     );
   }
 
