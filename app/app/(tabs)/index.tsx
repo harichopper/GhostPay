@@ -330,11 +330,11 @@ export default function HomeScreen() {
                   <Text style={styles.avatarInitial}>
                     {userName
                       ? userName
-                          .split(' ')
-                          .map((n) => n[0])
-                          .join('')
-                          .substring(0, 2)
-                          .toUpperCase()
+                        .split(' ')
+                        .map((n) => n[0])
+                        .join('')
+                        .substring(0, 2)
+                        .toUpperCase()
                       : 'GP'}
                   </Text>
                   <View style={[styles.activeDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
@@ -587,6 +587,11 @@ export default function HomeScreen() {
                       ? 'Recently'
                       : txDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
+                    const currentCurrency = displayCurrency || 'USD';
+                    const rate = algoRates?.[currentCurrency] || (currentCurrency === 'INR' ? 15.25 : currentCurrency === 'EUR' ? 0.165 : 0.18);
+                    const currencySymbol = currentCurrency === 'INR' ? '₹' : currentCurrency === 'EUR' ? '€' : '$';
+                    const fiatVal = (tx.amount * rate).toFixed(2);
+
                     return (
                       <Pressable
                         key={tx.id}
@@ -606,9 +611,14 @@ export default function HomeScreen() {
                             {tx.status === 'confirmed' ? 'Confirmed' : 'Pending Sync'} • {formattedTime}
                           </Text>
                         </View>
-                        <Text style={[styles.txAmount, isPaid ? styles.amountNegative : styles.amountPositive]}>
-                          {isPaid ? '-' : '+'}{tx.amount.toFixed(2)} ALGO
-                        </Text>
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text style={[styles.txAmount, isPaid ? styles.amountNegative : styles.amountPositive]}>
+                            {isPaid ? '-' : '+'}{tx.amount.toFixed(2)} ALGO
+                          </Text>
+                          <Text style={{ fontSize: 11, color: '#667085', marginTop: 2, fontWeight: '600' }}>
+                            ≈ {currencySymbol}{fiatVal} {currentCurrency}
+                          </Text>
+                        </View>
                       </Pressable>
                     );
                   })

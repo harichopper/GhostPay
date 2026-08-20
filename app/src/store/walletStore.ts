@@ -240,6 +240,7 @@ export const useWalletStore = create<WalletState>()(
 
       loadNetworkInfo: async () => {
         try {
+          void get().fetchExchangeRates();
           const info = await fetchNetworkInfo();
 
           set((state) => ({

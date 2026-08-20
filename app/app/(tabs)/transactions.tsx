@@ -28,6 +28,7 @@ interface SampleTx {
   name: string;
   type: 'Received' | 'Paid';
   amount: string;
+  fiatSubText?: string;
   isPositive: boolean;
   dateGroup: string;
   iconBg: string;
@@ -123,7 +124,7 @@ const SAMPLE_TRANSACTIONS: SampleTx[] = [
 
 export default function TransactionsScreen() {
   const router = useRouter();
-  const { walletAddress, transactions: storeTransactions } = useWalletStore();
+  const { walletAddress, transactions: storeTransactions, displayCurrency, algoRates } = useWalletStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [selectedWalletLabel, setSelectedWalletLabel] = useState('•••• 2872');
@@ -184,11 +185,17 @@ export default function TransactionsScreen() {
           : txDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
         const statusText = tx.status === 'confirmed' ? 'Confirmed' : 'Pending Sync';
 
+        const currentCurrency = displayCurrency || 'USD';
+        const rate = algoRates?.[currentCurrency] || (currentCurrency === 'INR' ? 15.25 : currentCurrency === 'EUR' ? 0.165 : 0.18);
+        const currencySymbol = currentCurrency === 'INR' ? '₹' : currentCurrency === 'EUR' ? '€' : '$';
+        const fiatVal = (tx.amount * rate).toFixed(2);
+
         return {
           id: tx.id,
           name: isPaid ? `To ${displayName}` : `From ${displayName}`,
           type: isPaid ? 'Paid' : 'Received',
           amount: `${isPaid ? '-' : '+'}${tx.amount.toFixed(2)} ALGO`,
+          fiatSubText: `≈ ${currencySymbol}${fiatVal} ${currentCurrency}`,
           isPositive: !isPaid,
           dateGroup,
           iconBg: isPaid ? '#172B3E' : '#05DA93',
@@ -200,7 +207,7 @@ export default function TransactionsScreen() {
       return convertedStoreTx;
     }
     return walletAddress ? [] : SAMPLE_TRANSACTIONS;
-  }, [storeTransactions, walletAddress]);
+  }, [storeTransactions, walletAddress, displayCurrency, algoRates]);
 
   const filteredTxList = useMemo(() => {
     if (!searchQuery.trim()) return allTxList;
@@ -258,93 +265,100 @@ export default function TransactionsScreen() {
         ) : (
           <>
             {/* Search Bar Input */}
-        {isSearchVisible && (
-          <View style={styles.searchBarContainer}>
-            <Ionicons name="search" size={18} color={colors.primaryDark} style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search by name or amount..."
-              placeholderTextColor="rgba(23, 43, 62, 0.45)"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus
-            />
-            {searchQuery.length > 0 && (
-              <Pressable onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={18} color={colors.primaryDark} />
-              </Pressable>
-            )}
-          </View>
-        )}
-
-        {/* Account / Algorand Pill Indicator */}
-        <View style={styles.pillWrapper}>
-          <View style={styles.cardPill}>
-            <Image
-              source={require('../../assets/branding/algorand-logo.webp')}
-              style={styles.algorandPillLogo}
-              resizeMode="contain"
-            />
-            <Text style={styles.cardPillText}>{displayWalletText}</Text>
-            <Ionicons name="chevron-down" size={14} color="rgba(255, 255, 255, 0.7)" style={{ marginLeft: 4 }} />
-          </View>
-        </View>
-
-        {/* Grouped Transaction List (ONLY the list animates) */}
-        <ScrollView
-          key={listKey}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {Object.keys(groupedTx).length === 0 ? (
-            <Animated.View entering={FadeInUp.duration(400)} style={styles.emptyContainer}>
-              <Ionicons name="receipt-outline" size={48} color={colors.textMuted} />
-              <Text style={styles.emptyText}>No transactions found</Text>
-            </Animated.View>
-          ) : (
-            Object.entries(groupedTx).map(([dateGroup, items], groupIndex) => (
-              <View key={dateGroup} style={styles.sectionGroup}>
-                <Text style={styles.dateGroupHeader}>{dateGroup}</Text>
-                {items.map((item, index) => (
-                  <AnimatedPressable
-                    key={item.id}
-                    entering={FadeInDown.duration(300).delay(index * 60)}
-                    style={styles.txCard}
-                    onPress={() => handleOpenDetail(item)}
-                  >
-                    {/* Avatar / Brand Badge */}
-                    <View style={[styles.avatarContainer, { backgroundColor: item.iconBg }]}>
-                      {item.iconName ? (
-                        <Ionicons name={item.iconName} size={20} color={colors.white} />
-                      ) : (
-                        <Text style={styles.avatarText}>{item.iconText}</Text>
-                      )}
-                    </View>
-
-                    {/* Details */}
-                    <View style={styles.txDetails}>
-                      <Text style={styles.txName}>{item.name}</Text>
-                      <Text style={styles.txType}>
-                        {item.statusText ? `${item.statusText} • ${item.formattedTime}` : item.type}
-                      </Text>
-                    </View>
-
-                    {/* Amount */}
-                    <Text
-                      style={[
-                        styles.txAmount,
-                        item.isPositive ? styles.amountPositive : styles.amountNegative
-                      ]}
-                    >
-                      {item.amount}
-                    </Text>
-                  </AnimatedPressable>
-                ))}
+            {isSearchVisible && (
+              <View style={styles.searchBarContainer}>
+                <Ionicons name="search" size={18} color={colors.primaryDark} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search by name or amount..."
+                  placeholderTextColor="rgba(23, 43, 62, 0.45)"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  autoFocus
+                />
+                {searchQuery.length > 0 && (
+                  <Pressable onPress={() => setSearchQuery('')}>
+                    <Ionicons name="close-circle" size={18} color={colors.primaryDark} />
+                  </Pressable>
+                )}
               </View>
-            ))
-          )
-        }
-        </ScrollView>
+            )}
+
+            {/* Account / Algorand Pill Indicator */}
+            <View style={styles.pillWrapper}>
+              <View style={styles.cardPill}>
+                <Image
+                  source={require('../../assets/branding/algorand-logo.webp')}
+                  style={styles.algorandPillLogo}
+                  resizeMode="contain"
+                />
+                <Text style={styles.cardPillText}>{displayWalletText}</Text>
+                <Ionicons name="chevron-down" size={14} color="rgba(255, 255, 255, 0.7)" style={{ marginLeft: 4 }} />
+              </View>
+            </View>
+
+            {/* Grouped Transaction List (ONLY the list animates) */}
+            <ScrollView
+              key={listKey}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContent}
+            >
+              {Object.keys(groupedTx).length === 0 ? (
+                <Animated.View entering={FadeInUp.duration(400)} style={styles.emptyContainer}>
+                  <Ionicons name="receipt-outline" size={48} color={colors.textMuted} />
+                  <Text style={styles.emptyText}>No transactions found</Text>
+                </Animated.View>
+              ) : (
+                Object.entries(groupedTx).map(([dateGroup, items], groupIndex) => (
+                  <View key={dateGroup} style={styles.sectionGroup}>
+                    <Text style={styles.dateGroupHeader}>{dateGroup}</Text>
+                    {items.map((item, index) => (
+                      <AnimatedPressable
+                        key={item.id}
+                        entering={FadeInDown.duration(300).delay(index * 60)}
+                        style={styles.txCard}
+                        onPress={() => handleOpenDetail(item)}
+                      >
+                        {/* Avatar / Brand Badge */}
+                        <View style={[styles.avatarContainer, { backgroundColor: item.iconBg }]}>
+                          {item.iconName ? (
+                            <Ionicons name={item.iconName} size={20} color={colors.white} />
+                          ) : (
+                            <Text style={styles.avatarText}>{item.iconText}</Text>
+                          )}
+                        </View>
+
+                        {/* Details */}
+                        <View style={styles.txDetails}>
+                          <Text style={styles.txName}>{item.name}</Text>
+                          <Text style={styles.txType}>
+                            {item.statusText ? `${item.statusText} • ${item.formattedTime}` : item.type}
+                          </Text>
+                        </View>
+
+                        {/* Amount Column */}
+                        <View style={{ alignItems: 'flex-end' }}>
+                          <Text
+                            style={[
+                              styles.txAmount,
+                              item.isPositive ? styles.amountPositive : styles.amountNegative
+                            ]}
+                          >
+                            {item.amount}
+                          </Text>
+                          {Boolean(item.fiatSubText) && (
+                            <Text style={{ fontSize: 11, color: '#667085', marginTop: 2, fontWeight: '600' }}>
+                              {item.fiatSubText}
+                            </Text>
+                          )}
+                        </View>
+                      </AnimatedPressable>
+                    ))}
+                  </View>
+                ))
+              )
+              }
+            </ScrollView>
           </>
         )}
       </LinearGradient>
