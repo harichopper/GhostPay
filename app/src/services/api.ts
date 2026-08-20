@@ -1,5 +1,5 @@
 import algosdk from 'algosdk';
-import { API_BASE_URL } from '../config/env';
+import { API_BASE_URL, X402_API_BASE_URL } from '../config/env';
 import type {
   AccountAsset,
   MintAssetPayload,
@@ -193,7 +193,7 @@ export type WalletRiskResponse = {
 
 export async function fetchWalletRiskScore(senderWallet: string, receiverWallet: string): Promise<WalletRiskResponse> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/security/wallet-risk`, {
+    const response = await fetch(`${X402_API_BASE_URL}/api/security/wallet-risk`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ senderWallet, receiverWallet })

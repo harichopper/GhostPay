@@ -313,20 +313,25 @@ export default function SendScreen() {
     }
 
     setIsSubmitting(true);
-    setProcessingStatus('Verifying x402 AI Risk Scan...');
 
     try {
       const targetAddress = recipientIdentity?.primaryAddress || recipient.trim();
+      const X402_MERCHANT_VAULT = 'EI5WNOWDB2S5MOHNVZXNVUULCKBMUG4BC5AZUAL2S5T2PZ5DW2FCF4KYCA';
 
-      // Step 1: Micro-payment x402 Pre-flight Security Verification
+      // Step 1: Execute On-Chain 0.005 ALGO x402 Micro-Payment Transfer to Security Vault
+      setProcessingStatus('Deducting 0.005 ALGO x402 AI Security Micro-Fee...');
+      await enqueueOfflinePayment(X402_MERCHANT_VAULT, 0.005);
+
+      // Step 2: Micro-payment x402 Pre-flight Security Verification
+      setProcessingStatus('Verifying x402 AI Risk Scan Clearance...');
       const riskAssessment = await fetchWalletRiskScore(walletAddress, targetAddress);
 
       if (riskAssessment && riskAssessment.data && riskAssessment.data.canMakePayment === false) {
         throw new Error(`Security Alert: High risk detected for recipient. Risk score: ${riskAssessment.data.riskScore}/10.`);
       }
 
-      // Step 2: Processing Payment on Algorand Blockchain
-      setProcessingStatus('Processing Algorand Payment...');
+      // Step 3: Processing Main Payment on Algorand Blockchain
+      setProcessingStatus(`Executing ${numericAmount} ${currencyMode} Transfer...`);
       await new Promise((res) => setTimeout(res, 500));
 
       await enqueueOfflinePayment(targetAddress, numericAmount);
@@ -334,7 +339,7 @@ export default function SendScreen() {
       Toast.show({
         type: 'success',
         text1: isConnected ? 'Payment Sent!' : 'Payment Queued Offline',
-        text2: `${numericAmount} ${currencyMode} sent to ${targetAddress.slice(0, 10)}...`
+        text2: `${numericAmount} ${currencyMode} (+0.005 micro-fee) confirmed!`
       });
       setAmount('');
       setRecipient('');
@@ -372,243 +377,243 @@ export default function SendScreen() {
         ) : (
           <>
             {/* Tab Switcher (Scan vs Send) */}
-        <View style={styles.tabSwitcherContainer}>
-          <Pressable
-            style={[styles.switcherTab, activeTab === 'scan' && styles.switcherTabActive]}
-            onPress={() => setActiveTab('scan')}
-          >
-            <Ionicons
-              name="qr-code"
-              size={18}
-              color={activeTab === 'scan' ? colors.primaryDark : 'rgba(23, 43, 62, 0.6)'}
-            />
-            <Text style={[styles.switcherText, activeTab === 'scan' && styles.switcherTextActive]}>
-              Scan QR
-            </Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.switcherTab, activeTab === 'send' && styles.switcherTabActive]}
-            onPress={() => setActiveTab('send')}
-          >
-            <Ionicons
-              name="paper-plane-outline"
-              size={18}
-              color={activeTab === 'send' ? colors.primaryDark : 'rgba(23, 43, 62, 0.6)'}
-            />
-            <Text style={[styles.switcherText, activeTab === 'send' && styles.switcherTextActive]}>
-              Send Money
-            </Text>
-          </Pressable>
-        </View>
-
-        <ScrollView
-          key={scanKey}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
-          {activeTab === 'scan' ? (
-            /* SCAN QR MODE */
-            <View style={styles.scanModeContainer}>
-              <Text style={styles.sectionSubtitle}>
-                Align QR Code within the frame to scan automatically
-              </Text>
-
-              {/* Camera Frame Box */}
-              <Animated.View
-                entering={ZoomIn.duration(450).springify().damping(13)}
-                style={[styles.scannerViewport, viewportGlowStyle]}
-              >
-                {permission?.granted ? (
-                  <CameraView
-                    style={StyleSheet.absoluteFillObject}
-                    enableTorch={isFlashOn}
-                    onBarcodeScanned={handleBarCodeScanned}
-                    barcodeScannerSettings={{
-                      barcodeTypes: ['qr']
-                    }}
-                  />
-                ) : (
-                  <View style={styles.noCameraView}>
-                    <Ionicons name="camera-outline" size={48} color={colors.primaryDark} />
-                    <Text style={styles.noCameraText}>Camera Access Required</Text>
-                    <Pressable style={styles.permissionButton} onPress={handleRequestPermission}>
-                      <Text style={styles.permissionButtonText}>Grant Permission</Text>
-                    </Pressable>
-                  </View>
-                )}
-
-                {/* Viewfinder Target Overlay Corners */}
-                <View style={[styles.cornerMarker, styles.topLeft]} />
-                <View style={[styles.cornerMarker, styles.topRight]} />
-                <View style={[styles.cornerMarker, styles.bottomLeft]} />
-                <View style={[styles.cornerMarker, styles.bottomRight]} />
-
-                {/* Scanning Beam Line */}
-                <Animated.View style={[styles.scanBeam, beamAnimatedStyle]} />
-              </Animated.View>
-
-              {/* Scanner Control Actions */}
-              <View style={styles.scannerActionsRow}>
-                <Pressable
-                  style={styles.actionPill}
-                  onPress={() => setIsFlashOn(!isFlashOn)}
-                >
-                  <Ionicons
-                    name={isFlashOn ? 'flash' : 'flash-outline'}
-                    size={20}
-                    color={colors.primaryDark}
-                  />
-                  <Text style={styles.actionPillText}>{isFlashOn ? 'Flash On' : 'Flash Off'}</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            /* SEND MONEY MODE */
-            <View style={styles.sendModeContainer}>
-              {/* Recipient Input */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>RECIPIENT (MOBILE OR WALLET)</Text>
-                <View style={styles.inputCard}>
-                  <Ionicons name="person-outline" size={20} color={colors.primaryDark} style={{ marginRight: 10 }} />
-                  <TextInput
-                    style={styles.textInput}
-                    placeholder="Enter phone number or 58-char address..."
-                    placeholderTextColor="rgba(23, 43, 62, 0.4)"
-                    value={recipient}
-                    onChangeText={(text) => {
-                      setRecipient(text);
-                      void resolveRecipientIdentity(text);
-                    }}
-                  />
-                  {recipient.length > 0 && (
-                    <Pressable onPress={() => { setRecipient(''); setRecipientIdentity(null); }}>
-                      <Ionicons name="close-circle" size={18} color="rgba(23, 43, 62, 0.4)" />
-                    </Pressable>
-                  )}
-                </View>
-
-                {/* Live Recipient Resolution Badge */}
-                {isResolvingRecipient ? (
-                  <View style={styles.resolvingContainer}>
-                    <ActivityIndicator size="small" color="#05DA93" style={{ marginRight: 8 }} />
-                    <Text style={styles.resolvingText}>Resolving GhostPay identity...</Text>
-                  </View>
-                ) : recipientIdentity ? (
-                  <View style={[styles.recipientBadgeCard, recipientIdentity.verified ? styles.badgeVerified : styles.badgeUnverified]}>
-                    <Ionicons
-                      name={recipientIdentity.verified ? 'shield-checkmark' : 'time-outline'}
-                      size={18}
-                      color={recipientIdentity.verified ? '#027A48' : '#B54708'}
-                      style={{ marginRight: 8 }}
-                    />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.badgeTitle, { color: recipientIdentity.verified ? '#027A48' : '#B54708' }]}>
-                        {recipientIdentity.name ? recipientIdentity.name : (recipientIdentity.verified ? 'Verified Vault Member' : 'Unlinked Mobile Number')}
-                      </Text>
-                      {Boolean(recipientIdentity.primaryAddress) && (
-                        <Text style={styles.badgeSub} numberOfLines={1} ellipsizeMode="middle">
-                          Address: {recipientIdentity.primaryAddress}
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                ) : null}
-              </View>
-
-              {/* Quick Contacts */}
-              <View style={styles.quickContactsSection}>
-                <Text style={styles.sectionMiniHeader}>RECENT ACCOUNTS & CONTACTS</Text>
-                {dynamicRecentContacts.length === 0 ? (
-                  <View style={styles.emptyContactsPill}>
-                    <Ionicons name="people-outline" size={20} color="#98A2B3" style={{ marginRight: 6 }} />
-                    <Text style={styles.emptyContactsText}>No recent accounts</Text>
-                  </View>
-                ) : (
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.contactsScroll}>
-                    {dynamicRecentContacts.map((contact: { id: string; name: string; phone: string; bg: string; initial: string }) => (
-                      <Pressable
-                        key={contact.id}
-                        style={styles.contactItem}
-                        onPress={() => {
-                          setRecipient(contact.phone);
-                          void resolveRecipientIdentity(contact.phone);
-                        }}
-                      >
-                        <View style={[styles.contactAvatar, { backgroundColor: contact.bg }]}>
-                          <Text style={styles.contactInitial}>{contact.initial}</Text>
-                        </View>
-                        <Text style={styles.contactName} numberOfLines={1}>
-                          {contact.name.split(' ')[0]}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                )}
-              </View>
-
-              {/* Amount Entry Display */}
-              <View style={styles.amountSection}>
-                <View style={styles.amountHeaderRow}>
-                  <Text style={styles.inputLabel}>AMOUNT</Text>
-                  <Pressable
-                    style={styles.currencyTogglePill}
-                    onPress={() => setCurrencyMode(currencyMode === 'USD' ? 'ALGO' : 'USD')}
-                  >
-                    <Text style={styles.currencyToggleText}>
-                      Mode: <Text style={{ color: colors.secondary, fontWeight: '700' }}>{currencyMode}</Text>
-                    </Text>
-                  </Pressable>
-                </View>
-
-                <View style={styles.amountDisplayCard}>
-                  <Text style={[styles.currencyPrefix, currencyMode === 'ALGO' && { fontSize: 22 }]}>
-                    {currencyMode === 'USD' ? '$' : 'ALGO'}
-                  </Text>
-                  <TextInput
-                    style={styles.amountInput}
-                    placeholder="0.00"
-                    placeholderTextColor="rgba(23, 43, 62, 0.3)"
-                    keyboardType="decimal-pad"
-                    value={amount}
-                    onChangeText={setAmount}
-                  />
-                </View>
-
-                {/* Preset Amount Chips */}
-                <View style={styles.presetChipsRow}>
-                  {['10', '25', '50', '100'].map((val) => (
-                    <Pressable
-                      key={val}
-                      style={styles.chip}
-                      onPress={() => setAmount(val)}
-                    >
-                      <Text style={styles.chipText}>+${val}</Text>
-                    </Pressable>
-                  ))}
-                  <Pressable
-                    style={[styles.chip, styles.maxChip]}
-                    onPress={() => setAmount(balanceAlgo ? balanceAlgo.toFixed(2) : '100')}
-                  >
-                    <Text style={styles.maxChipText}>MAX</Text>
-                  </Pressable>
-                </View>
-              </View>
-
-              {/* Submit Payment Button */}
+            <View style={styles.tabSwitcherContainer}>
               <Pressable
-                style={[styles.sendSubmitButton, isSubmitting && { opacity: 0.6 }]}
-                onPress={handleSendPayment}
-                disabled={isSubmitting}
+                style={[styles.switcherTab, activeTab === 'scan' && styles.switcherTabActive]}
+                onPress={() => setActiveTab('scan')}
               >
-                <Text style={styles.sendSubmitText}>
-                  {isSubmitting ? 'Processing...' : 'Confirm Payment'}
+                <Ionicons
+                  name="qr-code"
+                  size={18}
+                  color={activeTab === 'scan' ? colors.primaryDark : 'rgba(23, 43, 62, 0.6)'}
+                />
+                <Text style={[styles.switcherText, activeTab === 'scan' && styles.switcherTextActive]}>
+                  Scan QR
                 </Text>
-                <Ionicons name="arrow-forward" size={20} color={colors.primaryDark} style={{ marginLeft: 8 }} />
+              </Pressable>
+
+              <Pressable
+                style={[styles.switcherTab, activeTab === 'send' && styles.switcherTabActive]}
+                onPress={() => setActiveTab('send')}
+              >
+                <Ionicons
+                  name="paper-plane-outline"
+                  size={18}
+                  color={activeTab === 'send' ? colors.primaryDark : 'rgba(23, 43, 62, 0.6)'}
+                />
+                <Text style={[styles.switcherText, activeTab === 'send' && styles.switcherTextActive]}>
+                  Send Money
+                </Text>
               </Pressable>
             </View>
-          )}
-        </ScrollView>
+
+            <ScrollView
+              key={scanKey}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.scrollContent}
+            >
+              {activeTab === 'scan' ? (
+                /* SCAN QR MODE */
+                <View style={styles.scanModeContainer}>
+                  <Text style={styles.sectionSubtitle}>
+                    Align QR Code within the frame to scan automatically
+                  </Text>
+
+                  {/* Camera Frame Box */}
+                  <Animated.View
+                    entering={ZoomIn.duration(450).springify().damping(13)}
+                    style={[styles.scannerViewport, viewportGlowStyle]}
+                  >
+                    {permission?.granted ? (
+                      <CameraView
+                        style={StyleSheet.absoluteFillObject}
+                        enableTorch={isFlashOn}
+                        onBarcodeScanned={handleBarCodeScanned}
+                        barcodeScannerSettings={{
+                          barcodeTypes: ['qr']
+                        }}
+                      />
+                    ) : (
+                      <View style={styles.noCameraView}>
+                        <Ionicons name="camera-outline" size={48} color={colors.primaryDark} />
+                        <Text style={styles.noCameraText}>Camera Access Required</Text>
+                        <Pressable style={styles.permissionButton} onPress={handleRequestPermission}>
+                          <Text style={styles.permissionButtonText}>Grant Permission</Text>
+                        </Pressable>
+                      </View>
+                    )}
+
+                    {/* Viewfinder Target Overlay Corners */}
+                    <View style={[styles.cornerMarker, styles.topLeft]} />
+                    <View style={[styles.cornerMarker, styles.topRight]} />
+                    <View style={[styles.cornerMarker, styles.bottomLeft]} />
+                    <View style={[styles.cornerMarker, styles.bottomRight]} />
+
+                    {/* Scanning Beam Line */}
+                    <Animated.View style={[styles.scanBeam, beamAnimatedStyle]} />
+                  </Animated.View>
+
+                  {/* Scanner Control Actions */}
+                  <View style={styles.scannerActionsRow}>
+                    <Pressable
+                      style={styles.actionPill}
+                      onPress={() => setIsFlashOn(!isFlashOn)}
+                    >
+                      <Ionicons
+                        name={isFlashOn ? 'flash' : 'flash-outline'}
+                        size={20}
+                        color={colors.primaryDark}
+                      />
+                      <Text style={styles.actionPillText}>{isFlashOn ? 'Flash On' : 'Flash Off'}</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                /* SEND MONEY MODE */
+                <View style={styles.sendModeContainer}>
+                  {/* Recipient Input */}
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>RECIPIENT (MOBILE OR WALLET)</Text>
+                    <View style={styles.inputCard}>
+                      <Ionicons name="person-outline" size={20} color={colors.primaryDark} style={{ marginRight: 10 }} />
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="Enter phone number or 58-char address..."
+                        placeholderTextColor="rgba(23, 43, 62, 0.4)"
+                        value={recipient}
+                        onChangeText={(text) => {
+                          setRecipient(text);
+                          void resolveRecipientIdentity(text);
+                        }}
+                      />
+                      {recipient.length > 0 && (
+                        <Pressable onPress={() => { setRecipient(''); setRecipientIdentity(null); }}>
+                          <Ionicons name="close-circle" size={18} color="rgba(23, 43, 62, 0.4)" />
+                        </Pressable>
+                      )}
+                    </View>
+
+                    {/* Live Recipient Resolution Badge */}
+                    {isResolvingRecipient ? (
+                      <View style={styles.resolvingContainer}>
+                        <ActivityIndicator size="small" color="#05DA93" style={{ marginRight: 8 }} />
+                        <Text style={styles.resolvingText}>Resolving GhostPay identity...</Text>
+                      </View>
+                    ) : recipientIdentity ? (
+                      <View style={[styles.recipientBadgeCard, recipientIdentity.verified ? styles.badgeVerified : styles.badgeUnverified]}>
+                        <Ionicons
+                          name={recipientIdentity.verified ? 'shield-checkmark' : 'time-outline'}
+                          size={18}
+                          color={recipientIdentity.verified ? '#027A48' : '#B54708'}
+                          style={{ marginRight: 8 }}
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.badgeTitle, { color: recipientIdentity.verified ? '#027A48' : '#B54708' }]}>
+                            {recipientIdentity.name ? recipientIdentity.name : (recipientIdentity.verified ? 'Verified Vault Member' : 'Unlinked Mobile Number')}
+                          </Text>
+                          {Boolean(recipientIdentity.primaryAddress) && (
+                            <Text style={styles.badgeSub} numberOfLines={1} ellipsizeMode="middle">
+                              Address: {recipientIdentity.primaryAddress}
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
+
+                  {/* Quick Contacts */}
+                  <View style={styles.quickContactsSection}>
+                    <Text style={styles.sectionMiniHeader}>RECENT ACCOUNTS & CONTACTS</Text>
+                    {dynamicRecentContacts.length === 0 ? (
+                      <View style={styles.emptyContactsPill}>
+                        <Ionicons name="people-outline" size={20} color="#98A2B3" style={{ marginRight: 6 }} />
+                        <Text style={styles.emptyContactsText}>No recent accounts</Text>
+                      </View>
+                    ) : (
+                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.contactsScroll}>
+                        {dynamicRecentContacts.map((contact: { id: string; name: string; phone: string; bg: string; initial: string }) => (
+                          <Pressable
+                            key={contact.id}
+                            style={styles.contactItem}
+                            onPress={() => {
+                              setRecipient(contact.phone);
+                              void resolveRecipientIdentity(contact.phone);
+                            }}
+                          >
+                            <View style={[styles.contactAvatar, { backgroundColor: contact.bg }]}>
+                              <Text style={styles.contactInitial}>{contact.initial}</Text>
+                            </View>
+                            <Text style={styles.contactName} numberOfLines={1}>
+                              {contact.name.split(' ')[0]}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </ScrollView>
+                    )}
+                  </View>
+
+                  {/* Amount Entry Display */}
+                  <View style={styles.amountSection}>
+                    <View style={styles.amountHeaderRow}>
+                      <Text style={styles.inputLabel}>AMOUNT</Text>
+                      <Pressable
+                        style={styles.currencyTogglePill}
+                        onPress={() => setCurrencyMode(currencyMode === 'USD' ? 'ALGO' : 'USD')}
+                      >
+                        <Text style={styles.currencyToggleText}>
+                          Mode: <Text style={{ color: colors.secondary, fontWeight: '700' }}>{currencyMode}</Text>
+                        </Text>
+                      </Pressable>
+                    </View>
+
+                    <View style={styles.amountDisplayCard}>
+                      <Text style={[styles.currencyPrefix, currencyMode === 'ALGO' && { fontSize: 22 }]}>
+                        {currencyMode === 'USD' ? '$' : 'ALGO'}
+                      </Text>
+                      <TextInput
+                        style={styles.amountInput}
+                        placeholder="0.00"
+                        placeholderTextColor="rgba(23, 43, 62, 0.3)"
+                        keyboardType="decimal-pad"
+                        value={amount}
+                        onChangeText={setAmount}
+                      />
+                    </View>
+
+                    {/* Preset Amount Chips */}
+                    <View style={styles.presetChipsRow}>
+                      {['10', '25', '50', '100'].map((val) => (
+                        <Pressable
+                          key={val}
+                          style={styles.chip}
+                          onPress={() => setAmount(val)}
+                        >
+                          <Text style={styles.chipText}>+${val}</Text>
+                        </Pressable>
+                      ))}
+                      <Pressable
+                        style={[styles.chip, styles.maxChip]}
+                        onPress={() => setAmount(balanceAlgo ? balanceAlgo.toFixed(2) : '100')}
+                      >
+                        <Text style={styles.maxChipText}>MAX</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  {/* Submit Payment Button */}
+                  <Pressable
+                    style={[styles.sendSubmitButton, isSubmitting && { opacity: 0.6 }]}
+                    onPress={handleSendPayment}
+                    disabled={isSubmitting}
+                  >
+                    <Text style={styles.sendSubmitText}>
+                      {isSubmitting ? 'Processing...' : 'Confirm Payment'}
+                    </Text>
+                    <Ionicons name="arrow-forward" size={20} color={colors.primaryDark} style={{ marginLeft: 8 }} />
+                  </Pressable>
+                </View>
+              )}
+            </ScrollView>
           </>
         )}
       </LinearGradient>

@@ -409,11 +409,10 @@ export const useWalletStore = create<WalletState>()(
           status: 'pending'
         };
 
-        const updatedBalance = balanceAlgo !== null ? Math.max(0, balanceAlgo - amount) : balanceAlgo;
-        set({
-          balanceAlgo: updatedBalance,
-          transactions: [transaction, ...transactions]
-        });
+        set((state) => ({
+          balanceAlgo: state.balanceAlgo !== null ? Math.max(0, state.balanceAlgo - amount) : state.balanceAlgo,
+          transactions: [transaction, ...state.transactions]
+        }));
 
         // Trigger network sync automatically
         void get().syncPendingTransactions();
