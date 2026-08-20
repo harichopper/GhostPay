@@ -13,6 +13,7 @@ export interface WalletLink {
 export interface MobileIdentity {
   accountId: string;      // stable application-level account identifier (e.g. "acct_<nanoid>")
   mobileNumber: string;
+  name?: string;
   wallets: WalletLink[];
   verified: boolean;
   status: 'active' | 'suspended';
@@ -37,6 +38,7 @@ const mobileIdentitySchema = new Schema<MobileIdentity>(
   {
     accountId: { type: String, required: true, unique: true, index: true },
     mobileNumber: { type: String, required: true, unique: true, index: true },
+    name: { type: String },
     wallets: { type: [walletSchema], default: [] },
     verified: { type: Boolean, default: true },
     status: { type: String, enum: ['active', 'suspended'], default: 'active' }

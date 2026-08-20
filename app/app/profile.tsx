@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   SafeAreaView,
@@ -14,6 +15,7 @@ import {
   TextInput,
   View
 } from 'react-native';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +28,7 @@ import ViewShot from 'react-native-view-shot';
 import { useWalletStore } from '../src/store/walletStore';
 import { colors } from '../src/theme/colors';
 import { MnemonicBackupModal } from '../src/components/MnemonicBackupModal';
+import { PhoneInputWithCountryPicker, COUNTRY_CODES, CountryItem } from '../src/components/PhoneInputWithCountryPicker';
 import { requestMobileVerification, verifyMobileAndLinkWallet, lookupIdentityByWallet } from '../src/services/api';
 
 export default function ProfileScreen() {
@@ -38,16 +41,43 @@ export default function ProfileScreen() {
     generateWalletAddress,
     importWalletFromMnemonic,
     verifiedPhone,
-    setVerifiedPhone
+    setVerifiedPhone,
+    userName,
+    setUserName,
+    refreshBalance
   } = useWalletStore();
   const isOnline = isConnected && !demoMode?.simulateOffline;
 
   // Identity / Phone verification states
+  const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState<CountryItem>(COUNTRY_CODES[0]);
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [otp, setOtp] = useState('');
   const [isOtpSent, setIsOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false);
 
+  // Field-level validation error states
+  const [nameError, setNameError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const [otpError, setOtpError] = useState('');
+
+  const handleOpenPhoneModal = () => {
+    setNameError('');
+    setPhoneError('');
+    setOtpError('');
+    setIsPhoneModalOpen(true);
+  };
+
+  const handleClosePhoneModal = () => {
+    setIsPhoneModalOpen(false);
+    setNameError('');
+    setPhoneError('');
+    setOtpError('');
+    setIsOtpSent(false);
+    setOtp('');
+  };
 
   // Onboarding local state if wallet is not connected in Profile
   const [onboardingMode, setOnboardingMode] = useState<'welcome' | 'import'>('welcome');
@@ -108,10 +138,10 @@ export default function ProfileScreen() {
   };
 
   useEffect(() => {
-    if (verifiedPhone) {
-      setPhone(verifiedPhone);
+    if (walletAddress && isOnline) {
+      refreshBalance();
     }
-  }, [verifiedPhone]);
+  }, [walletAddress, isOnline]);
 
   // Load existing wallet identity from backend on mount
   useEffect(() => {
@@ -131,72 +161,94 @@ export default function ProfileScreen() {
     void loadIdentity();
   }, [walletAddress, isOnline]);
 
-  const handleRequestOtp = async () => {
-    if (!phone.trim()) {
-      Toast.show({
-        type: 'error',
-        text1: 'Phone Required',
-        text2: 'Please enter a valid mobile number.'
-      });
-      return;
+  const getFullMobileNumber = () => {
+    const digitsOnly = phone.replace(/\D/g, '');
+    const countryDigits = selectedCountry.code.replace(/\D/g, '');
+    if (!digitsOnly) return '';
+
+    if (digitsOnly.startsWith(countryDigits)) {
+      return `+${digitsOnly}`;
     }
+    return `+${countryDigits}${digitsOnly}`;
+  };
+
+  const handleRequestOtp = async () => {
+    let isValid = true;
+    setNameError('');
+    setPhoneError('');
+
+    if (!fullName.trim()) {
+      setNameError('Full Name is required');
+      isValid = false;
+    }
+
+    const fullMobileNumber = getFullMobileNumber();
+    const digitsCount = fullMobileNumber.replace(/\D/g, '').length;
+
+    if (!phone.trim()) {
+      setPhoneError('Mobile Number is required');
+      isValid = false;
+    } else if (digitsCount < 8 || digitsCount > 15) {
+      setPhoneError('Please enter a valid mobile number (8-15 digits)');
+      isValid = false;
+    }
+
+    if (!isValid) return;
 
     setLoading(true);
     try {
-      const res = await requestMobileVerification(phone);
+      const res = await requestMobileVerification(fullMobileNumber);
       if (res.verificationSent) {
         setIsOtpSent(true);
-        Toast.show({
-          type: 'success',
-          text1: 'OTP Dispatched',
-          text2: 'OTP code sent to your mobile number.'
-        });
         // Auto-fill OTP in development mode for convenience
         if (res.devOtpCode) {
           setOtp(res.devOtpCode);
         }
       } else {
-        Alert.alert('Verification Failed', 'Could not send verification code.');
+        setPhoneError('Could not send verification code. Try again.');
       }
     } catch (err: any) {
-      Alert.alert('Verification Error', err.message || 'An error occurred.');
+      setPhoneError(err.message || 'Verification error occurred.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleVerifyOtp = async () => {
-    if (!otp.trim()) {
-      Toast.show({
-        type: 'error',
-        text1: 'OTP Required',
-        text2: 'Please enter the 6-digit OTP code.'
-      });
+    setOtpError('');
+
+    if (!otp.trim() || otp.trim().length < 6) {
+      setOtpError('Please enter the full 6-digit OTP code');
       return;
     }
+
+    const fullMobileNumber = getFullMobileNumber();
 
     setLoading(true);
     try {
       const res = await verifyMobileAndLinkWallet({
-        mobileNumber: phone,
+        mobileNumber: fullMobileNumber,
         otpCode: otp,
-        walletAddress
+        walletAddress,
+        name: fullName.trim()
       });
 
       if (res.verified) {
-        setVerifiedPhone(phone);
-        setIsOtpSent(false);
-        setOtp('');
+        setVerifiedPhone(fullMobileNumber);
+        if (fullName.trim()) {
+          setUserName(fullName.trim());
+        }
+        handleClosePhoneModal();
         Toast.show({
           type: 'success',
           text1: 'Identity Verified',
-          text2: 'Phone number successfully linked to your wallet!'
+          text2: 'Mobile identity successfully linked to your wallet!'
         });
       } else {
-        Alert.alert('Error', 'Invalid or expired OTP code.');
+        setOtpError('Invalid or expired OTP code');
       }
     } catch (err: any) {
-      Alert.alert('Error', err.message || 'Verification failed.');
+      setOtpError(err.message || 'OTP verification failed');
     } finally {
       setLoading(false);
     }
@@ -281,15 +333,24 @@ export default function ProfileScreen() {
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             {walletAddress ? (
               <>
-                {/* User Badge Card (Only shown after Mobile Number is connected) */}
+                {/* 1. If Phone Number IS connected -> Show Verified User Badge Card */}
                 {Boolean(verifiedPhone) && (
                   <View style={styles.profileCard}>
                     <View style={styles.avatarCircle}>
-                      <Text style={styles.avatarInitial}>GP</Text>
+                      <Text style={styles.avatarInitial}>
+                        {userName
+                          ? userName
+                            .split(' ')
+                            .map((n) => n[0])
+                            .join('')
+                            .substring(0, 2)
+                            .toUpperCase()
+                          : 'GP'}
+                      </Text>
                       <View style={[styles.activeDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
                     </View>
                     <View style={styles.profileDetails}>
-                      <Text style={styles.profileName}>GhostPay User</Text>
+                      <Text style={styles.profileName}>{userName || 'GhostPay User'}</Text>
                       <Text style={styles.profileStatus}>Verified Vault Member</Text>
                     </View>
                     <View style={styles.verifiedShield}>
@@ -298,7 +359,23 @@ export default function ProfileScreen() {
                   </View>
                 )}
 
-                {/* Section: Linked Wallet details */}
+                {/* 2. Prominent Connect Mobile Banner Card (Shown at top when phone is NOT connected) */}
+                {!verifiedPhone && (
+                  <Pressable style={styles.phoneConnectBanner} onPress={handleOpenPhoneModal}>
+                    <View style={styles.phoneBannerIconCircle}>
+                      <Ionicons name="call" size={22} color="#05DA93" />
+                    </View>
+                    <View style={styles.phoneBannerContent}>
+                      <Text style={styles.phoneBannerTitle}>Connect Wallet with Phone</Text>
+                      <Text style={styles.phoneBannerSub}>
+                        Link your phone number to authorize zero-data payments seamlessly.
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#05DA93" />
+                  </Pressable>
+                )}
+
+                {/* Section: Linked Algorand Wallet details */}
                 <View style={styles.sectionCard}>
                   <Text style={styles.sectionTitle}>ALGORAND WALLET</Text>
                   <Pressable style={styles.walletRow} onPress={() => handleCopyAddress(walletAddress)}>
@@ -313,6 +390,20 @@ export default function ProfileScreen() {
                     </View>
                     <Ionicons name="copy-outline" size={16} color="#667085" />
                   </Pressable>
+
+                  {/* Linked Mobile Identity Row (Embedded in Algorand Wallet Card) */}
+                  {Boolean(verifiedPhone) && (
+                    <>
+                      <View style={styles.divider} />
+                      <View style={styles.linkedPhoneRow}>
+                        <Ionicons name="checkmark-circle" size={18} color="#12B76A" style={{ marginRight: 8 }} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.walletLabel}>Linked Mobile Identity</Text>
+                          <Text style={styles.walletAddress}>{verifiedPhone}</Text>
+                        </View>
+                      </View>
+                    </>
+                  )}
 
                   {wallets.length > 1 && (
                     <>
@@ -413,71 +504,6 @@ export default function ProfileScreen() {
                     </View>
                   </View>
                 </ViewShot>
-
-                {/* Section: Identity / Phone Link (Verification) */}
-                <View style={styles.sectionCard}>
-                  <Text style={styles.sectionTitle}>MOBILE IDENTITY VERIFICATION</Text>
-                  <Text style={styles.description}>
-                    Link your verified phone number to easily send/receive funds using your contact number instead of long public keys.
-                  </Text>
-
-                  {verifiedPhone ? (
-                    <View style={styles.verifiedContainer}>
-                      <Ionicons name="checkmark-circle" size={24} color="#12B76A" style={{ marginRight: 10 }} />
-                      <View>
-                        <Text style={styles.verifiedTitle}>Linked Phone Number</Text>
-                        <Text style={styles.verifiedValue}>{verifiedPhone}</Text>
-                      </View>
-                    </View>
-                  ) : (
-                    <View style={styles.formContainer}>
-                      {!isOtpSent ? (
-                        <>
-                          <TextInput
-                            style={styles.input}
-                            placeholder="Mobile Number (e.g. +1234567890)"
-                            placeholderTextColor="#98A2B3"
-                            keyboardType="phone-pad"
-                            value={phone}
-                            onChangeText={setPhone}
-                          />
-                          {loading ? (
-                            <ActivityIndicator size="small" color="#05DA93" style={styles.loader} />
-                          ) : (
-                            <Pressable style={styles.primaryButton} onPress={handleRequestOtp}>
-                              <Text style={styles.primaryButtonText}>Send OTP Code</Text>
-                            </Pressable>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <Text style={styles.otpNotice}>Enter the 6-digit OTP code sent to {phone}:</Text>
-                          <TextInput
-                            style={styles.input}
-                            placeholder="6-Digit OTP Code"
-                            placeholderTextColor="#98A2B3"
-                            keyboardType="number-pad"
-                            maxLength={6}
-                            value={otp}
-                            onChangeText={setOtp}
-                          />
-                          {loading ? (
-                            <ActivityIndicator size="small" color="#05DA93" style={styles.loader} />
-                          ) : (
-                            <View style={styles.buttonRow}>
-                              <Pressable style={styles.secondaryButton} onPress={() => setIsOtpSent(false)}>
-                                <Text style={styles.secondaryButtonText}>Back</Text>
-                              </Pressable>
-                              <Pressable style={styles.primaryButtonHalf} onPress={handleVerifyOtp}>
-                                <Text style={styles.primaryButtonText}>Verify & Link</Text>
-                              </Pressable>
-                            </View>
-                          )}
-                        </>
-                      )}
-                    </View>
-                  )}
-                </View>
               </>
             ) : (
               /* Onboarding Action Card Form Area if no Wallet */
@@ -557,6 +583,120 @@ export default function ProfileScreen() {
         onCopy={handleCopyMnemonic}
         onDone={handleDoneBackup}
       />
+
+      {/* Mobile Identity Verification Modal */}
+      <Modal
+        visible={isPhoneModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={handleClosePhoneModal}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View entering={ZoomIn.duration(350).springify()} style={styles.phoneModalCard}>
+            <Pressable style={styles.modalCloseButton} onPress={handleClosePhoneModal}>
+              <Ionicons name="close" size={20} color={colors.primaryDark} />
+            </Pressable>
+
+            <View style={styles.phoneModalIconCircle}>
+              <Ionicons name="call" size={28} color="#05DA93" />
+            </View>
+
+            <Text style={styles.phoneModalTitle}>Mobile Identity Link</Text>
+            <Text style={styles.phoneModalSub}>
+              Link your verified phone number to easily send/receive funds using your mobile number instead of long public keys.
+            </Text>
+
+            {!isOtpSent ? (
+              <View style={{ width: '100%', marginTop: 16 }}>
+                <View style={{ marginBottom: 12 }}>
+                  <TextInput
+                    style={[styles.input, Boolean(nameError) && styles.inputError]}
+                    placeholder="Full Name"
+                    placeholderTextColor="#98A2B3"
+                    value={fullName}
+                    onChangeText={(text) => {
+                      setFullName(text);
+                      if (nameError) setNameError('');
+                    }}
+                  />
+                  {Boolean(nameError) && (
+                    <Text style={styles.fieldErrorText}>{nameError}</Text>
+                  )}
+                </View>
+
+                <PhoneInputWithCountryPicker
+                  value={phone}
+                  onChangeText={(text) => {
+                    setPhone(text);
+                    if (phoneError) setPhoneError('');
+                  }}
+                  selectedCountry={selectedCountry}
+                  onSelectCountry={setSelectedCountry}
+                  error={phoneError}
+                  placeholder="Mobile Number"
+                />
+
+                {loading ? (
+                  <ActivityIndicator size="small" color="#05DA93" style={styles.loader} />
+                ) : (
+                  <Pressable style={styles.primaryButton} onPress={handleRequestOtp}>
+                    <Text style={styles.primaryButtonText}>Send OTP Code</Text>
+                  </Pressable>
+                )}
+              </View>
+            ) : (
+              <View style={{ width: '100%', marginTop: 16 }}>
+                {/* Green OTP Dispatched Success Banner inside Modal */}
+                <View style={styles.otpSuccessBanner}>
+                  <Ionicons name="checkmark-circle" size={22} color="#12B76A" style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.otpSuccessTitle}>OTP Dispatched!</Text>
+                    <Text style={styles.otpSuccessSub}>Verification code sent to {getFullMobileNumber()}</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.otpNotice}>Enter the 6-digit OTP code:</Text>
+                <View style={{ marginBottom: 16 }}>
+                  <TextInput
+                    style={[styles.input, Boolean(otpError) && styles.inputError]}
+                    placeholder="6-Digit OTP Code"
+                    placeholderTextColor="#98A2B3"
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    value={otp}
+                    onChangeText={(text) => {
+                      setOtp(text);
+                      if (otpError) setOtpError('');
+                    }}
+                  />
+                  {Boolean(otpError) && (
+                    <Text style={styles.fieldErrorText}>{otpError}</Text>
+                  )}
+                </View>
+
+                {loading ? (
+                  <ActivityIndicator size="small" color="#05DA93" style={styles.loader} />
+                ) : (
+                  <View style={styles.buttonRow}>
+                    <Pressable
+                      style={styles.secondaryButton}
+                      onPress={() => {
+                        setIsOtpSent(false);
+                        setOtpError('');
+                      }}
+                    >
+                      <Text style={styles.secondaryButtonText}>Back</Text>
+                    </Pressable>
+                    <Pressable style={styles.primaryButtonHalf} onPress={handleVerifyOtp}>
+                      <Text style={styles.primaryButtonText}>Verify & Link</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            )}
+          </Animated.View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1003,5 +1143,238 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: 'Inter_600SemiBold',
     color: '#475569'
+  },
+  phoneConnectBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colors.secondary,
+    padding: 16,
+    marginBottom: 20,
+    elevation: 3,
+    shadowColor: '#05DA93',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10
+  },
+  phoneBannerIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 14
+  },
+  phoneBannerContent: {
+    flex: 1,
+    paddingRight: 6
+  },
+  phoneBannerTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter_700Bold',
+    color: colors.primaryDark,
+    marginBottom: 2
+  },
+  phoneBannerSub: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: '#667085',
+    lineHeight: 17
+  },
+  phoneModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16
+  },
+  phoneModalIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14
+  },
+  phoneModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Orbitron_700Bold',
+    color: colors.primaryDark,
+    textAlign: 'center',
+    marginBottom: 6
+  },
+  phoneModalSub: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 19
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(23, 43, 62, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10
+  },
+  linkedPhoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 4
+  },
+  linkedPhoneLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#667085',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5
+  },
+  linkedPhoneValue: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: colors.primaryDark,
+    marginTop: 2
+  },
+  inputError: {
+    borderColor: '#FDA29B',
+    backgroundColor: '#FFFBFA'
+  },
+  fieldErrorText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: '#D92D20',
+    marginTop: 4,
+    marginLeft: 4
+  },
+  phoneInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    gap: 8
+  },
+  countryPickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 48,
+    paddingHorizontal: 12,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#EAECF0'
+  },
+  countryFlagText: {
+    fontSize: 18,
+    marginRight: 6
+  },
+  countryCodeText: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: colors.primaryDark
+  },
+  countryModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(23, 43, 62, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20
+  },
+  countryModalCard: {
+    width: '100%',
+    maxWidth: 380,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    elevation: 10,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16
+  },
+  countryModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: 14,
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9'
+  },
+  countryModalTitle: {
+    fontSize: 16,
+    fontFamily: 'Orbitron_700Bold',
+    color: colors.primaryDark
+  },
+  countryOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 4
+  },
+  countryOptionSelected: {
+    backgroundColor: '#ECFDF5'
+  },
+  countryOptionFlag: {
+    fontSize: 20,
+    marginRight: 12
+  },
+  countryOptionName: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: colors.primaryDark
+  },
+  countryOptionCode: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#05DA93'
+  },
+  otpSuccessBanner: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16
+  },
+  otpSuccessTitle: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#027A48'
+  },
+  otpSuccessSub: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: '#065F46',
+    marginTop: 2
   }
 });

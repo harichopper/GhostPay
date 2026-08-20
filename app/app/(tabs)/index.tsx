@@ -95,7 +95,8 @@ export default function HomeScreen() {
     importWalletFromMnemonic,
     refreshBalance,
     displayCurrency,
-    algoRates
+    algoRates,
+    userName
   } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
@@ -274,12 +275,21 @@ export default function HomeScreen() {
             <>
               <Pressable style={styles.userProfileGroup} onPress={() => router.push('/profile')}>
                 <View style={styles.avatarCircle}>
-                  <Text style={styles.avatarInitial}>GP</Text>
+                  <Text style={styles.avatarInitial}>
+                    {userName
+                      ? userName
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')
+                          .substring(0, 2)
+                          .toUpperCase()
+                      : 'GP'}
+                  </Text>
                   <View style={[styles.activeDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
                 </View>
                 <View style={styles.greetingTextGroup}>
                   <Text style={styles.greetingSub}>Welcome back,</Text>
-                  <Text style={styles.greetingTitle}>GhostPay User</Text>
+                  <Text style={styles.greetingTitle}>{userName || 'GhostPay User'}</Text>
                 </View>
               </Pressable>
 

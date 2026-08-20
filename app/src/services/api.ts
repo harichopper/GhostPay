@@ -90,6 +90,7 @@ export async function verifyMobileAndLinkWallet(input: {
   otpCode: string;
   walletAddress: string;
   walletLabel?: string;
+  name?: string;
 }): Promise<WalletLookupResponse> {
   const response = await fetch(`${API_BASE_URL}/api/identity/verify-mobile`, {
     method: 'POST',

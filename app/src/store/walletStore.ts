@@ -64,6 +64,8 @@ type WalletState = {
   demoMode: DemoMode;
   verifiedPhone: string | null;
   setVerifiedPhone: (phone: string | null) => void;
+  userName: string | null;
+  setUserName: (name: string | null) => void;
   displayCurrency: 'USD' | 'INR' | 'EUR';
   setDisplayCurrency: (currency: 'USD' | 'INR' | 'EUR') => void;
   algoRates: { USD: number; INR: number; EUR: number };
@@ -182,6 +184,8 @@ export const useWalletStore = create<WalletState>()(
       },
       verifiedPhone: null,
       setVerifiedPhone: (phone) => set({ verifiedPhone: phone }),
+      userName: null,
+      setUserName: (name) => set({ userName: name }),
       displayCurrency: 'USD',
       setDisplayCurrency: (currency) => set({ displayCurrency: currency }),
       algoRates: { USD: 0.15, INR: 12.5, EUR: 0.14 },
@@ -341,7 +345,8 @@ export const useWalletStore = create<WalletState>()(
           balanceAlgo: null,
           lastBalanceRefreshAt: null,
           transactions: [],
-          verifiedPhone: null
+          verifiedPhone: null,
+          userName: null
         });
       },
 
@@ -536,6 +541,7 @@ export const useWalletStore = create<WalletState>()(
         transactions: state.transactions,
         demoMode: state.demoMode,
         verifiedPhone: state.verifiedPhone,
+        userName: state.userName,
         displayCurrency: state.displayCurrency
       })
     }

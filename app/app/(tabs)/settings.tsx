@@ -63,7 +63,8 @@ export default function SettingsScreen() {
     transactions,
     disconnectWallet,
     displayCurrency,
-    setDisplayCurrency
+    setDisplayCurrency,
+    userName
   } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
@@ -296,13 +297,22 @@ export default function SettingsScreen() {
               <View style={styles.profileCard}>
                 <View style={styles.avatarWrapper}>
                   <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>GP</Text>
+                    <Text style={styles.avatarText}>
+                      {userName
+                        ? userName
+                            .split(' ')
+                            .map((n) => n[0])
+                            .join('')
+                            .substring(0, 2)
+                            .toUpperCase()
+                        : 'GP'}
+                    </Text>
                   </View>
                   <View style={[styles.statusBadge, { backgroundColor: isConnected ? '#12B76A' : '#F79E1B' }]} />
                 </View>
 
                 <View style={styles.profileDetails}>
-                  <Text style={styles.profileName}>GhostPay User</Text>
+                  <Text style={styles.profileName}>{userName || 'GhostPay User'}</Text>
                   <Pressable style={styles.addressPill} onPress={handleCopyAddress}>
                     <Text style={styles.addressText}>{formattedAddress}</Text>
                     <Ionicons name="duplicate-outline" size={14} color="#667085" style={{ marginLeft: 4 }} />

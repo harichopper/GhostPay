@@ -123,11 +123,13 @@ export async function verifyMobileAndLinkWallet(input: {
   walletLabel?: string;
   walletId?: string;
   network?: string;
+  name?: string;
 }) {
   const mobileNumber = normalizeMobileNumber(input.mobileNumberRaw);
   const otpCode = input.otpCode.trim();
   const walletAddress = input.walletAddress.trim();
   const network = input.network?.trim() || env.algorandNetwork;
+  const name = input.name?.trim();
 
   if (!algosdk.isValidAddress(walletAddress)) {
     throw new Error('Wallet address is invalid');
@@ -175,7 +177,8 @@ export async function verifyMobileAndLinkWallet(input: {
         wallets: []
       },
       $set: {
-        verified: true
+        verified: true,
+        ...(name ? { name } : {})
       }
     },
     { upsert: true }
