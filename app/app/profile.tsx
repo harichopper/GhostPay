@@ -341,23 +341,17 @@ export default function ProfileScreen() {
                 {/* My Wallet QR Code Card (Placed below Primary Wallet Card) */}
                 <ViewShot ref={cardShotRef} options={{ format: 'png', quality: 1.0 }} style={{ width: '100%' }}>
                   <View style={styles.qrCardContainer}>
-                    {/* GhostPay Branding Header */}
-                    <View style={styles.qrBrandHeaderRow}>
+                    {/* GhostPay Branding Header (Stacked vertical like Index page) */}
+                    <View style={styles.qrBrandHeaderWrapper}>
                       <Image
                         source={require('../assets/app_logo/ghostPay-logo-index.png')}
-                        style={styles.qrBrandLogo}
+                        style={styles.qrBrandLogoStacked}
                         resizeMode="contain"
                       />
-                      <Text style={styles.qrBrandText}>
+                      <Text style={styles.qrBrandTextStacked}>
                         <Text style={{ color: colors.primaryDark }}>GHOST</Text>
                         <Text style={{ color: colors.secondary }}>PAY</Text>
                       </Text>
-                    </View>
-
-                    <View style={styles.qrCardTopPillRow}>
-                      <View style={styles.primaryBadgePill}>
-                        <Text style={styles.primaryBadgeText}>Primary Vault Wallet</Text>
-                      </View>
                     </View>
 
                     {/* Header Title & ID */}
@@ -901,21 +895,20 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     alignItems: 'center'
   },
-  qrBrandHeaderRow: {
-    flexDirection: 'row',
+  qrBrandHeaderWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
-    gap: 8
+    marginBottom: 14
   },
-  qrBrandLogo: {
-    width: 28,
-    height: 28
+  qrBrandLogoStacked: {
+    width: 70,
+    height: 70
   },
-  qrBrandText: {
-    fontSize: 18,
+  qrBrandTextStacked: {
+    fontSize: 20,
     fontFamily: 'Orbitron_700Bold',
-    letterSpacing: 1.5
+    letterSpacing: 2,
+    marginTop: 4
   },
   qrCardTopPillRow: {
     width: '100%',
