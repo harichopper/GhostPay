@@ -1,7 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors } from '../../theme/colors';
+import algosdk from 'algosdk';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from 'react-native';
+import Toast from 'react-native-toast-message';
+import { useSecurityStore } from '../../store/securityStore';
+import { useWalletStore } from '../../store/walletStore';
+import { removePin, savePin } from '../../utils/security';
 
 type LockScreenProps = {
   biometricEnabled: boolean;
@@ -21,6 +38,10 @@ export function LockScreen({
   onBiometricPress
 }: LockScreenProps) {
   const [pin, setPin] = useState('');
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [resetStep, setResetStep] = useState<'option' | 'mnemonic' | 'newPin'>('option');
+  const [seedPhrase, setSeedPhrase] = useState('');
+  const [newPin, setNewPin] = useState('');
 
   useEffect(() => {
     if (biometricEnabled) {
@@ -45,76 +66,339 @@ export function LockScreen({
     }
   };
 
+  const handleForgotPinPress = () => {
+    setResetStep('option');
+    setSeedPhrase('');
+    setNewPin('');
+    setIsForgotModalOpen(true);
+  };
+
+  const handleVerifyMnemonic = () => {
+    const cleanPhrase = seedPhrase.trim().toLowerCase();
+    const words = cleanPhrase.split(/\s+/).filter(Boolean);
+
+    if (words.length !== 25) {
+      Alert.alert(
+        'Invalid Seed Phrase',
+        'Algorand secret key must contain exactly 25 words. Please check your entered words.'
+      );
+      return;
+    }
+
+    try {
+      const account = algosdk.mnemonicToSecretKey(cleanPhrase);
+      const derivedAddress = String(account.addr);
+      const activeAddress = useWalletStore.getState().walletAddress;
+
+      if (activeAddress && derivedAddress.toLowerCase() !== activeAddress.toLowerCase()) {
+        Alert.alert(
+          'Mnemonic Mismatch',
+          `The entered seed phrase derives address ${derivedAddress.slice(0, 8)}... but active wallet address is ${activeAddress.slice(0, 8)}... Please enter the correct seed phrase.`
+        );
+        return;
+      }
+
+      // Valid phrase! Advance to new PIN step
+      setResetStep('newPin');
+    } catch (err: any) {
+      Alert.alert(
+        'Invalid Seed Phrase',
+        err?.message || 'The phrase you entered is not a valid 25-word Algorand checksum seed phrase.'
+      );
+    }
+  };
+
+  const handleSaveNewPin = async () => {
+    if (newPin.length < 4) return;
+    try {
+      await savePin(newPin);
+      useSecurityStore.getState().unlock();
+      setIsForgotModalOpen(false);
+      Toast.show({
+        type: 'success',
+        text1: 'PIN Reset Successfully',
+        text2: 'Your new security PIN is now active'
+      });
+    } catch {
+      Toast.show({
+        type: 'error',
+        text1: 'PIN Update Failed',
+        text2: 'Could not save new PIN'
+      });
+    }
+  };
+
+  const handleResetSecurityLock = async () => {
+    try {
+      await removePin();
+      useSecurityStore.getState().disableAppLock();
+      useSecurityStore.getState().unlock();
+      setIsForgotModalOpen(false);
+      Toast.show({
+        type: 'info',
+        text1: 'Security Lock Disabled',
+        text2: 'App lock requirement has been removed'
+      });
+    } catch {
+      Toast.show({
+        type: 'error',
+        text1: 'Action Failed',
+        text2: 'Could not disable lock'
+      });
+    }
+  };
+
   return (
     <View style={styles.overlay} accessibilityViewIsModal>
-      <View style={styles.card}>
-        <View style={styles.iconCircle}>
-          <Ionicons name="lock-closed" size={34} color={colors.secondary} />
-        </View>
-
-        <Text style={styles.title}>GhostPay Locked</Text>
-        <Text style={styles.subtitle}>
-          {biometricEnabled ? `Use ${biometricName} or enter your PIN` : 'Enter your 4-digit PIN to continue'}
-        </Text>
-
-        <View style={styles.pinDots}>
-          {[0, 1, 2, 3].map((index) => (
-            <View key={index} style={[styles.pinDot, pin.length > index && styles.pinDotFilled]} />
-          ))}
-        </View>
-
-        {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-
-        {biometricEnabled ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Unlock with ${biometricName}`}
-            disabled={isAuthenticating}
-            onPress={() => void onBiometricPress()}
-            style={[styles.biometricButton, isAuthenticating && styles.buttonDisabled]}
+      <LinearGradient
+        colors={['#FBFDFC', '#F0F7F3', '#E4F2EB']}
+        style={styles.gradientBackground}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <SafeAreaView style={styles.safeArea}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
           >
-            <Ionicons name="finger-print" size={22} color={colors.secondary} />
-            <Text style={styles.biometricButtonText}>
-              {isAuthenticating ? 'Authenticating...' : `Use ${biometricName}`}
-            </Text>
-          </Pressable>
-        ) : null}
-        <View style={styles.keypad}>
-          {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'backspace'].map((key, index) => {
-            if (!key) {
-              return <View key={`empty-${index}`} style={styles.keypadButton} />;
-            }
+            {/* Top Mascot & Brand Header */}
+            <View style={styles.headerSection}>
+              <View style={styles.mascotCircleOuter}>
+                <Image
+                  source={require('../../../assets/app_logo/ghostPay-logo-index.png')}
+                  style={styles.mascotImage}
+                  resizeMode="contain"
+                />
+              </View>
 
-            if (key === 'backspace') {
-              return (
+              <View style={styles.brandTitleRow}>
+                <Ionicons name="flash" size={22} color="#05DA93" style={{ marginRight: 6 }} />
+                <Text style={styles.brandTitle}>GHOSTPAY</Text>
+              </View>
+              <Text style={styles.brandTagline}>Secure. Instant. Private.</Text>
+            </View>
+
+            {/* Main Lock Card */}
+            <View style={styles.lockCard}>
+              {/* Green Lock Badge */}
+              <View style={styles.lockIconCircle}>
+                <Ionicons name="lock-open-outline" size={26} color="#12B76A" />
+              </View>
+
+              {/* Header Titles */}
+              <Text style={styles.cardTitle}>Enter PIN</Text>
+              <Text style={styles.cardSubtitle}>Enter your 4-digit PIN to unlock GhostPay</Text>
+
+              {/* 4-Digit PIN Indicators */}
+              <View style={styles.pinDotsRow}>
+                {[0, 1, 2, 3].map((index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.pinDot,
+                      pin.length > index ? styles.pinDotFilled : styles.pinDotEmpty
+                    ]}
+                  />
+                ))}
+              </View>
+
+              {errorMessage ? (
+                <Text style={styles.errorText}>{errorMessage}</Text>
+              ) : null}
+
+              {/* 3x4 Keypad Grid */}
+              <View style={styles.keypadGrid}>
+                {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((key) => (
+                  <View key={key} style={styles.keypadCell}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.keypadBtn,
+                        pressed && styles.keypadBtnPressed
+                      ]}
+                      disabled={isAuthenticating}
+                      onPress={() => handleNumberPress(key)}
+                    >
+                      <Text style={styles.keypadBtnText}>{key}</Text>
+                    </Pressable>
+                  </View>
+                ))}
+
+                {/* Row 4: Biometric Icon, 0, Backspace */}
+                <View style={styles.keypadCell}>
+                  {biometricEnabled ? (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.keypadBtn,
+                        styles.biometricKeypadBtn,
+                        pressed && styles.keypadBtnPressed
+                      ]}
+                      disabled={isAuthenticating}
+                      onPress={() => void onBiometricPress()}
+                    >
+                      <Ionicons name="finger-print" size={26} color="#12B76A" />
+                    </Pressable>
+                  ) : (
+                    <View style={styles.keypadBtnEmpty} />
+                  )}
+                </View>
+
+                <View style={styles.keypadCell}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.keypadBtn,
+                      pressed && styles.keypadBtnPressed
+                    ]}
+                    disabled={isAuthenticating}
+                    onPress={() => handleNumberPress('0')}
+                  >
+                    <Text style={styles.keypadBtnText}>0</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.keypadCell}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.keypadBtn,
+                      pressed && styles.keypadBtnPressed
+                    ]}
+                    disabled={isAuthenticating}
+                    onPress={() => setPin((current) => current.slice(0, -1))}
+                  >
+                    <Ionicons name="backspace-outline" size={24} color="#101828" />
+                  </Pressable>
+                </View>
+              </View>
+
+              {/* Biometric Link Button */}
+              {biometricEnabled && (
                 <Pressable
-                  key={key}
-                  accessibilityRole="button"
-                  accessibilityLabel="Delete PIN digit"
+                  style={styles.biometricLinkBtn}
                   disabled={isAuthenticating}
-                  onPress={() => setPin((current) => current.slice(0, -1))}
-                  style={styles.keypadButton}
+                  onPress={() => void onBiometricPress()}
                 >
-                  <Ionicons name="backspace-outline" size={24} color={colors.white} />
+                  <Ionicons name="finger-print" size={18} color="#12B76A" style={{ marginRight: 6 }} />
+                  <Text style={styles.biometricLinkText}>
+                    {isAuthenticating ? 'Authenticating...' : `Use ${biometricName}`}
+                  </Text>
                 </Pressable>
-              );
-            }
+              )}
+            </View>
 
-            return (
-              <Pressable
-                key={key}
-                accessibilityRole="button"
-                accessibilityLabel={`PIN digit ${key}`}
-                disabled={isAuthenticating}
-                onPress={() => handleNumberPress(key)}
-                style={styles.keypadButton}
-              >
-                <Text style={styles.keypadNumber}>{key}</Text>
+            {/* Forgot PIN Link */}
+            <Pressable style={styles.forgotPinBtn} onPress={handleForgotPinPress}>
+              <Text style={styles.forgotPinText}>Forgot PIN?</Text>
+            </Pressable>
+          </ScrollView>
+        </SafeAreaView>
+      </LinearGradient>
+
+      {/* Functional Forgot PIN Recovery Modal */}
+      <Modal
+        visible={isForgotModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsForgotModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setIsForgotModalOpen(false)} />
+
+          <View style={styles.modalCard}>
+            <View style={styles.modalHandleBar} />
+
+            {/* Header */}
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalTitleGroup}>
+                <View style={styles.modalIconCircle}>
+                  <Ionicons name="key" size={22} color="#05DA93" />
+                </View>
+                <View>
+                  <Text style={styles.modalTitleText}>PIN Recovery</Text>
+                  <Text style={styles.modalSubText}>Restore access to your GhostPay wallet</Text>
+                </View>
+              </View>
+
+              <Pressable style={styles.modalCloseBtn} onPress={() => setIsForgotModalOpen(false)}>
+                <Ionicons name="close" size={20} color="#101828" />
               </Pressable>
-            );
-          })}
+            </View>
+
+            {resetStep === 'option' && (
+              <View style={styles.modalBody}>
+                <Text style={styles.sectionSubtitle}>
+                  Select how you would like to recover or reset your PIN:
+                </Text>
+
+                <Pressable
+                  style={styles.recoveryCard}
+                  onPress={() => setResetStep('mnemonic')}
+                >
+                  <View style={styles.optionIconCircle}>
+                    <Ionicons name="document-text" size={22} color="#027A48" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.optionTitleText}>Reset with Mnemonic Phrase</Text>
+                    <Text style={styles.optionSubText}>Enter your 25-word secret key to set a new PIN</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
+                </Pressable>
+              </View>
+            )}
+
+            {resetStep === 'mnemonic' && (
+              <View style={styles.modalBody}>
+                <Text style={styles.sectionSubtitle}>
+                  Paste or type your 25-word secret seed phrase to verify ownership:
+                </Text>
+
+                <TextInput
+                  style={styles.mnemonicInput}
+                  multiline
+                  numberOfLines={3}
+                  placeholder="e.g. apple banana cherry zebra..."
+                  placeholderTextColor="#98A2B3"
+                  value={seedPhrase}
+                  onChangeText={setSeedPhrase}
+                />
+
+                <Pressable
+                  style={[styles.primaryModalBtn, !seedPhrase.trim() && { opacity: 0.5 }]}
+                  disabled={!seedPhrase.trim()}
+                  onPress={handleVerifyMnemonic}
+                >
+                  <Text style={styles.primaryBtnText}>Verify Mnemonic & Set New PIN</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {resetStep === 'newPin' && (
+              <View style={styles.modalBody}>
+                <Text style={styles.sectionSubtitle}>
+                  Enter a new 4-digit security passcode for GhostPay:
+                </Text>
+
+                <TextInput
+                  style={styles.pinInput}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  secureTextEntry
+                  placeholder="• • • •"
+                  placeholderTextColor="#98A2B3"
+                  value={newPin}
+                  onChangeText={setNewPin}
+                />
+
+                <Pressable
+                  style={[styles.primaryModalBtn, newPin.length < 4 && { opacity: 0.5 }]}
+                  disabled={newPin.length < 4}
+                  onPress={handleSaveNewPin}
+                >
+                  <Text style={styles.primaryBtnText}>Save New PIN & Unlock</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
         </View>
-      </View>
+      </Modal>
     </View>
   );
 }
@@ -122,113 +406,340 @@ export function LockScreen({
 const styles = StyleSheet.create({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    backgroundColor: '#0D1E2F',
     zIndex: 100000,
-    elevation: 100000
+    elevation: 100000,
+    backgroundColor: '#F0F7F3'
   },
-  card: {
+  gradientBackground: {
+    flex: 1
+  },
+  safeArea: {
+    flex: 1
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'ios' ? 20 : 30,
+    paddingBottom: 40,
+    alignItems: 'center'
+  },
+  headerSection: {
+    alignItems: 'center',
+    marginBottom: 20
+  },
+  mascotCircleOuter: {
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    marginBottom: 14,
+    borderWidth: 2,
+    borderColor: 'rgba(5, 218, 147, 0.2)'
+  },
+  mascotImage: {
+    width: 110,
+    height: 110
+  },
+  brandTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4
+  },
+  brandTitle: {
+    fontSize: 22,
+    fontFamily: 'Orbitron_700Bold',
+    color: '#172B3E',
+    letterSpacing: 1.2
+  },
+  brandTagline: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#667085'
+  },
+  lockCard: {
     width: '100%',
     maxWidth: 420,
-    height: '58%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 20,
     alignItems: 'center',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    elevation: 6,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    backgroundColor: '#172B3E',
-    paddingHorizontal: 28,
-    paddingTop: 20,
-    paddingBottom: 16
+    borderColor: 'rgba(23, 43, 62, 0.06)'
   },
-  iconCircle: {
+  lockIconCircle: {
     width: 52,
     height: 52,
+    borderRadius: 26,
+    backgroundColor: '#E8F8F0',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 26,
-    backgroundColor: 'rgba(5, 218, 147, 0.12)',
     marginBottom: 10
   },
-  title: {
-    color: colors.white,
-    fontFamily: 'Orbitron_700Bold',
-    fontSize: 19,
+  cardTitle: {
+    fontSize: 22,
+    fontFamily: 'Inter_700Bold',
+    color: '#101828',
     textAlign: 'center'
   },
-  subtitle: {
-    color: 'rgba(255, 255, 255, 0.68)',
-    fontFamily: 'Inter_500Medium',
+  cardSubtitle: {
     fontSize: 13,
-    lineHeight: 20,
-    marginTop: 6,
-    textAlign: 'center'
+    fontFamily: 'Inter_500Medium',
+    color: '#667085',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 18
   },
-  pinDots: {
+  pinDotsRow: {
     flexDirection: 'row',
-    gap: 16,
-    marginTop: 16,
-    marginBottom: 12
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20
   },
   pinDot: {
-    width: 15,
-    height: 15,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.22)',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)'
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginHorizontal: 8
   },
   pinDotFilled: {
-    borderColor: colors.secondary,
-    backgroundColor: colors.secondary
+    backgroundColor: '#12B76A'
+  },
+  pinDotEmpty: {
+    backgroundColor: '#E4E7EC'
   },
   errorText: {
-    color: '#F97066',
+    color: '#D92D20',
     fontFamily: 'Inter_600SemiBold',
     fontSize: 12,
-    marginBottom: 8,
+    marginBottom: 14,
     textAlign: 'center'
   },
-  biometricButton: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
-    width: '100%',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(5, 218, 147, 0.38)',
-    backgroundColor: 'rgba(5, 218, 147, 0.1)',
-    paddingVertical: 12,
-    marginBottom: 16
-  },
-  biometricButtonText: {
-    color: colors.secondary,
-    fontFamily: 'Inter_700Bold',
-    fontSize: 13
-  },
-  buttonDisabled: {
-    opacity: 0.65
-  },
-  keypad: {
+  keypadGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: 4,
     width: '100%',
-    marginTop: 8
+    maxWidth: 320,
+    justifyContent: 'space-between',
+    rowGap: 14
   },
-  keypadButton: {
+  keypadCell: {
+    width: '30%',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  keypadBtn: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '30%',
-    height: 42,
-    borderRadius: 14
+    elevation: 2,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(23, 43, 62, 0.08)'
   },
-  keypadNumber: {
-    color: colors.white,
+  keypadBtnPressed: {
+    backgroundColor: '#F2F4F7',
+    transform: [{ scale: 0.95 }]
+  },
+  keypadBtnText: {
+    fontSize: 24,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#101828'
+  },
+  biometricKeypadBtn: {
+    backgroundColor: '#E8F8F0',
+    borderColor: 'rgba(18, 183, 106, 0.2)'
+  },
+  keypadBtnEmpty: {
+    width: 64,
+    height: 64
+  },
+  biometricLinkBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 16
+  },
+  biometricLinkText: {
+    fontSize: 14,
     fontFamily: 'Inter_700Bold',
-    fontSize: 22
+    color: '#12B76A'
+  },
+  forgotPinBtn: {
+    marginTop: 18,
+    paddingVertical: 10,
+    paddingHorizontal: 20
+  },
+  forgotPinText: {
+    fontSize: 13,
+    fontFamily: 'Inter_700Bold',
+    color: '#101828',
+    textAlign: 'center'
+  },
+  /* Modal Styles */
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(23, 43, 62, 0.6)'
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    elevation: 20,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16
+  },
+  modalHandleBar: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#E4E7EC',
+    alignSelf: 'center',
+    marginBottom: 16
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16
+  },
+  modalTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  modalIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#E8F8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12
+  },
+  modalTitleText: {
+    fontSize: 18,
+    fontFamily: 'Inter_700Bold',
+    color: '#101828'
+  },
+  modalSubText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: '#667085',
+    marginTop: 2
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  modalBody: {
+    paddingVertical: 10
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#475467',
+    marginBottom: 16
+  },
+  recoveryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(23, 43, 62, 0.08)'
+  },
+  optionIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#E8F8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12
+  },
+  optionTitleText: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#101828'
+  },
+  optionSubText: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: '#667085',
+    marginTop: 2
+  },
+  mnemonicInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    fontSize: 14,
+    fontFamily: 'Inter_500Medium',
+    color: '#101828',
+    borderWidth: 1,
+    borderColor: 'rgba(23, 43, 62, 0.12)',
+    minHeight: 90,
+    textAlignVertical: 'top',
+    marginBottom: 16
+  },
+  pinInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 14,
+    fontSize: 22,
+    fontFamily: 'Inter_700Bold',
+    color: '#101828',
+    borderWidth: 1,
+    borderColor: 'rgba(23, 43, 62, 0.12)',
+    textAlign: 'center',
+    letterSpacing: 10,
+    marginBottom: 16
+  },
+  primaryModalBtn: {
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: '#05DA93',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8
+  },
+  primaryBtnText: {
+    fontSize: 15,
+    fontFamily: 'Inter_700Bold',
+    color: '#172B3E'
   }
 });
