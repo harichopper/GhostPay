@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import algosdk from 'algosdk';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
@@ -9,13 +8,15 @@ import {
   Platform,
   Pressable,
   SafeAreaView,
-  ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View
 } from 'react-native';
 import Toast from 'react-native-toast-message';
+import algosdk from 'algosdk';
 import { useSecurityStore } from '../../store/securityStore';
 import { useWalletStore } from '../../store/walletStore';
 import { removePin, savePin } from '../../utils/security';
@@ -43,6 +44,16 @@ export function LockScreen({
   const [seedPhrase, setSeedPhrase] = useState('');
   const [newPin, setNewPin] = useState('');
 
+  const { height } = useWindowDimensions();
+  const isSmallScreen = height < 680;
+  const isMediumScreen = height >= 680 && height < 780;
+
+  // Responsive metric calculations
+  const mascotOuterSize = isSmallScreen ? 76 : isMediumScreen ? 94 : 110;
+  const mascotImgSize = isSmallScreen ? 60 : isMediumScreen ? 76 : 90;
+  const keypadBtnSize = isSmallScreen ? 48 : isMediumScreen ? 54 : 60;
+  const lockIconSize = isSmallScreen ? 38 : 46;
+
   useEffect(() => {
     if (biometricEnabled) {
       void onBiometricPress(true);
@@ -66,22 +77,31 @@ export function LockScreen({
     }
   };
 
+  const [mnemonicError, setMnemonicError] = useState<string | null>(null);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+
   const handleForgotPinPress = () => {
     setResetStep('option');
     setSeedPhrase('');
     setNewPin('');
+    setMnemonicError(null);
+    setIsSuccessModalOpen(false);
     setIsForgotModalOpen(true);
   };
 
   const handleVerifyMnemonic = () => {
+    setMnemonicError(null);
     const cleanPhrase = seedPhrase.trim().toLowerCase();
     const words = cleanPhrase.split(/\s+/).filter(Boolean);
 
     if (words.length !== 25) {
-      Alert.alert(
-        'Invalid Seed Phrase',
-        'Algorand secret key must contain exactly 25 words. Please check your entered words.'
-      );
+      const errMsg = `Algorand secret key must contain exactly 25 words (you entered ${words.length}). Please check your phrase.`;
+      setMnemonicError(errMsg);
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid Seed Phrase',
+        text2: `Expected 25 words, got ${words.length}`
+      });
       return;
     }
 
@@ -91,20 +111,26 @@ export function LockScreen({
       const activeAddress = useWalletStore.getState().walletAddress;
 
       if (activeAddress && derivedAddress.toLowerCase() !== activeAddress.toLowerCase()) {
-        Alert.alert(
-          'Mnemonic Mismatch',
-          `The entered seed phrase derives address ${derivedAddress.slice(0, 8)}... but active wallet address is ${activeAddress.slice(0, 8)}... Please enter the correct seed phrase.`
-        );
+        const errMsg = `Entered seed phrase derives address ${derivedAddress.slice(0, 8)}... but active wallet is ${activeAddress.slice(0, 8)}...`;
+        setMnemonicError(errMsg);
+        Toast.show({
+          type: 'error',
+          text1: 'Mnemonic Mismatch',
+          text2: 'Seed phrase does not match active wallet'
+        });
         return;
       }
 
-      // Valid phrase! Advance to new PIN step
-      setResetStep('newPin');
+      // Valid phrase! Display Mnemonic Verification Success Modal
+      setIsSuccessModalOpen(true);
     } catch (err: any) {
-      Alert.alert(
-        'Invalid Seed Phrase',
-        err?.message || 'The phrase you entered is not a valid 25-word Algorand checksum seed phrase.'
-      );
+      const errMsg = err?.message || 'Invalid 25-word Algorand checksum seed phrase. Please verify your words.';
+      setMnemonicError(errMsg);
+      Toast.show({
+        type: 'error',
+        text1: 'Invalid Checksum',
+        text2: 'Please verify your words'
+      });
     }
   };
 
@@ -157,46 +183,57 @@ export function LockScreen({
         end={{ x: 1, y: 1 }}
       >
         <SafeAreaView style={styles.safeArea}>
-          <ScrollView
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-          >
+          {/* Non-scrollable fixed responsive viewport */}
+          <View style={styles.fixedViewport}>
             {/* Top Mascot & Brand Header */}
             <View style={styles.headerSection}>
-              <View style={styles.mascotCircleOuter}>
+              <View
+                style={[
+                  styles.mascotCircleOuter,
+                  { width: mascotOuterSize, height: mascotOuterSize, borderRadius: mascotOuterSize / 2 }
+                ]}
+              >
                 <Image
                   source={require('../../../assets/app_logo/ghostPay-logo-index.png')}
-                  style={styles.mascotImage}
+                  style={{ width: mascotImgSize, height: mascotImgSize }}
                   resizeMode="contain"
                 />
               </View>
 
               <View style={styles.brandTitleRow}>
-                <Ionicons name="flash" size={22} color="#05DA93" style={{ marginRight: 6 }} />
-                <Text style={styles.brandTitle}>GHOSTPAY</Text>
+                <Ionicons name="flash" size={isSmallScreen ? 18 : 22} color="#05DA93" style={{ marginRight: 5 }} />
+                <Text style={[styles.brandTitle, isSmallScreen && { fontSize: 18 }]}>GHOSTPAY</Text>
               </View>
-              <Text style={styles.brandTagline}>Secure. Instant. Private.</Text>
+              <Text style={[styles.brandTagline, isSmallScreen && { fontSize: 11 }]}>Secure. Instant. Private.</Text>
             </View>
 
             {/* Main Lock Card */}
-            <View style={styles.lockCard}>
+            <View style={[styles.lockCard, isSmallScreen && { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 12 }]}>
               {/* Green Lock Badge */}
-              <View style={styles.lockIconCircle}>
-                <Ionicons name="lock-open-outline" size={26} color="#12B76A" />
+              <View
+                style={[
+                  styles.lockIconCircle,
+                  { width: lockIconSize, height: lockIconSize, borderRadius: lockIconSize / 2 }
+                ]}
+              >
+                <Ionicons name="lock-open-outline" size={isSmallScreen ? 20 : 24} color="#12B76A" />
               </View>
 
               {/* Header Titles */}
-              <Text style={styles.cardTitle}>Enter PIN</Text>
-              <Text style={styles.cardSubtitle}>Enter your 4-digit PIN to unlock GhostPay</Text>
+              <Text style={[styles.cardTitle, isSmallScreen && { fontSize: 18 }]}>Enter PIN</Text>
+              <Text style={[styles.cardSubtitle, isSmallScreen && { fontSize: 11, marginBottom: 10 }]}>
+                Enter your 4-digit PIN to unlock GhostPay
+              </Text>
 
               {/* 4-Digit PIN Indicators */}
-              <View style={styles.pinDotsRow}>
+              <View style={[styles.pinDotsRow, isSmallScreen && { marginBottom: 10 }]}>
                 {[0, 1, 2, 3].map((index) => (
                   <View
                     key={index}
                     style={[
                       styles.pinDot,
-                      pin.length > index ? styles.pinDotFilled : styles.pinDotEmpty
+                      pin.length > index ? styles.pinDotFilled : styles.pinDotEmpty,
+                      isSmallScreen && { width: 10, height: 10, borderRadius: 5, marginHorizontal: 6 }
                     ]}
                   />
                 ))}
@@ -207,18 +244,19 @@ export function LockScreen({
               ) : null}
 
               {/* 3x4 Keypad Grid */}
-              <View style={styles.keypadGrid}>
+              <View style={[styles.keypadGrid, isSmallScreen && { rowGap: 8 }]}>
                 {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((key) => (
                   <View key={key} style={styles.keypadCell}>
                     <Pressable
                       style={({ pressed }) => [
                         styles.keypadBtn,
+                        { width: keypadBtnSize, height: keypadBtnSize, borderRadius: keypadBtnSize / 2 },
                         pressed && styles.keypadBtnPressed
                       ]}
                       disabled={isAuthenticating}
                       onPress={() => handleNumberPress(key)}
                     >
-                      <Text style={styles.keypadBtnText}>{key}</Text>
+                      <Text style={[styles.keypadBtnText, isSmallScreen && { fontSize: 20 }]}>{key}</Text>
                     </Pressable>
                   </View>
                 ))}
@@ -230,15 +268,16 @@ export function LockScreen({
                       style={({ pressed }) => [
                         styles.keypadBtn,
                         styles.biometricKeypadBtn,
+                        { width: keypadBtnSize, height: keypadBtnSize, borderRadius: keypadBtnSize / 2 },
                         pressed && styles.keypadBtnPressed
                       ]}
                       disabled={isAuthenticating}
                       onPress={() => void onBiometricPress()}
                     >
-                      <Ionicons name="finger-print" size={26} color="#12B76A" />
+                      <Ionicons name="finger-print" size={isSmallScreen ? 22 : 26} color="#12B76A" />
                     </Pressable>
                   ) : (
-                    <View style={styles.keypadBtnEmpty} />
+                    <View style={{ width: keypadBtnSize, height: keypadBtnSize }} />
                   )}
                 </View>
 
@@ -246,12 +285,13 @@ export function LockScreen({
                   <Pressable
                     style={({ pressed }) => [
                       styles.keypadBtn,
+                      { width: keypadBtnSize, height: keypadBtnSize, borderRadius: keypadBtnSize / 2 },
                       pressed && styles.keypadBtnPressed
                     ]}
                     disabled={isAuthenticating}
                     onPress={() => handleNumberPress('0')}
                   >
-                    <Text style={styles.keypadBtnText}>0</Text>
+                    <Text style={[styles.keypadBtnText, isSmallScreen && { fontSize: 20 }]}>0</Text>
                   </Pressable>
                 </View>
 
@@ -259,12 +299,13 @@ export function LockScreen({
                   <Pressable
                     style={({ pressed }) => [
                       styles.keypadBtn,
+                      { width: keypadBtnSize, height: keypadBtnSize, borderRadius: keypadBtnSize / 2 },
                       pressed && styles.keypadBtnPressed
                     ]}
                     disabled={isAuthenticating}
                     onPress={() => setPin((current) => current.slice(0, -1))}
                   >
-                    <Ionicons name="backspace-outline" size={24} color="#101828" />
+                    <Ionicons name="backspace-outline" size={isSmallScreen ? 20 : 24} color="#101828" />
                   </Pressable>
                 </View>
               </View>
@@ -272,23 +313,23 @@ export function LockScreen({
               {/* Biometric Link Button */}
               {biometricEnabled && (
                 <Pressable
-                  style={styles.biometricLinkBtn}
+                  style={[styles.biometricLinkBtn, isSmallScreen && { marginTop: 10 }]}
                   disabled={isAuthenticating}
                   onPress={() => void onBiometricPress()}
                 >
-                  <Ionicons name="finger-print" size={18} color="#12B76A" style={{ marginRight: 6 }} />
-                  <Text style={styles.biometricLinkText}>
+                  <Ionicons name="finger-print" size={16} color="#12B76A" style={{ marginRight: 6 }} />
+                  <Text style={[styles.biometricLinkText, isSmallScreen && { fontSize: 12 }]}>
                     {isAuthenticating ? 'Authenticating...' : `Use ${biometricName}`}
                   </Text>
                 </Pressable>
               )}
             </View>
 
-            {/* Forgot PIN Link */}
+            {/* Bottom Forgot PIN Link */}
             <Pressable style={styles.forgotPinBtn} onPress={handleForgotPinPress}>
               <Text style={styles.forgotPinText}>Forgot PIN?</Text>
             </Pressable>
-          </ScrollView>
+          </View>
         </SafeAreaView>
       </LinearGradient>
 
@@ -399,6 +440,66 @@ export function LockScreen({
           </View>
         </View>
       </Modal>
+
+      {/* Custom Error Alert Modal */}
+      <Modal
+        visible={Boolean(mnemonicError)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMnemonicError(null)}
+      >
+        <View style={styles.errorModalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setMnemonicError(null)} />
+          <View style={styles.errorModalCard}>
+            <View style={styles.errorIconBadge}>
+              <Ionicons name="alert-circle" size={32} color="#D92D20" />
+            </View>
+
+            <Text style={styles.errorModalTitle}>Seed Phrase Error</Text>
+            <Text style={styles.errorModalBody}>{mnemonicError}</Text>
+
+            <Pressable
+              style={styles.errorModalBtn}
+              onPress={() => setMnemonicError(null)}
+            >
+              <Text style={styles.errorModalBtnText}>Got it</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Mnemonic Verification Success Modal */}
+      <Modal
+        visible={isSuccessModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsSuccessModalOpen(false)}
+      >
+        <View style={styles.errorModalOverlay}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setIsSuccessModalOpen(false)} />
+          <View style={styles.errorModalCard}>
+            <View style={styles.successIconBadge}>
+              <Ionicons name="checkmark-circle" size={40} color="#12B76A" />
+            </View>
+
+            <Text style={styles.errorModalTitle}>Mnemonic Verified!</Text>
+            <Text style={styles.errorModalBody}>
+              Your 25-word secret phrase was successfully verified for wallet ownership. Tap below to set your new 4-digit security PIN.
+            </Text>
+
+            <Pressable
+              style={styles.successModalBtn}
+              onPress={() => {
+                setIsSuccessModalOpen(false);
+                setResetStep('newPin');
+              }}
+            >
+              <Ionicons name="key" size={18} color="#172B3E" style={{ marginRight: 8 }} />
+              <Text style={styles.successModalBtnText}>Set 4-Digit PIN</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -416,20 +517,19 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1
   },
-  scrollContent: {
+  fixedViewport: {
+    flex: 1,
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'ios' ? 20 : 30,
-    paddingBottom: 40,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) + 20 : 24,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 16,
+    justifyContent: 'space-between',
     alignItems: 'center'
   },
   headerSection: {
     alignItems: 'center',
-    marginBottom: 20
+    marginBottom: 4
   },
   mascotCircleOuter: {
-    width: 130,
-    height: 130,
-    borderRadius: 65,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -438,18 +538,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
-    marginBottom: 14,
+    marginBottom: 8,
     borderWidth: 2,
     borderColor: 'rgba(5, 218, 147, 0.2)'
-  },
-  mascotImage: {
-    width: 110,
-    height: 110
   },
   brandTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4
+    marginBottom: 2
   },
   brandTitle: {
     fontSize: 22,
@@ -458,18 +554,18 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2
   },
   brandTagline: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter_500Medium',
     color: '#667085'
   },
   lockCard: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 400,
     backgroundColor: '#FFFFFF',
-    borderRadius: 32,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 20,
+    borderRadius: 28,
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 16,
     alignItems: 'center',
     elevation: 6,
     shadowColor: '#172B3E',
@@ -480,33 +576,30 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(23, 43, 62, 0.06)'
   },
   lockIconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
     backgroundColor: '#E8F8F0',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10
+    marginBottom: 8
   },
   cardTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontFamily: 'Inter_700Bold',
     color: '#101828',
     textAlign: 'center'
   },
   cardSubtitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: 'Inter_500Medium',
     color: '#667085',
     textAlign: 'center',
-    marginTop: 4,
-    marginBottom: 18
+    marginTop: 2,
+    marginBottom: 14
   },
   pinDotsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20
+    marginBottom: 14
   },
   pinDot: {
     width: 12,
@@ -524,16 +617,16 @@ const styles = StyleSheet.create({
     color: '#D92D20',
     fontFamily: 'Inter_600SemiBold',
     fontSize: 12,
-    marginBottom: 14,
+    marginBottom: 10,
     textAlign: 'center'
   },
   keypadGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     width: '100%',
-    maxWidth: 320,
+    maxWidth: 300,
     justifyContent: 'space-between',
-    rowGap: 14
+    rowGap: 10
   },
   keypadCell: {
     width: '30%',
@@ -541,9 +634,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   keypadBtn: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -560,7 +650,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.95 }]
   },
   keypadBtnText: {
-    fontSize: 24,
+    fontSize: 22,
     fontFamily: 'Inter_600SemiBold',
     color: '#101828'
   },
@@ -568,27 +658,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#E8F8F0',
     borderColor: 'rgba(18, 183, 106, 0.2)'
   },
-  keypadBtnEmpty: {
-    width: 64,
-    height: 64
-  },
   biometricLinkBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16
+    marginTop: 14,
+    paddingVertical: 4,
+    paddingHorizontal: 12
   },
   biometricLinkText: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'Inter_700Bold',
     color: '#12B76A'
   },
   forgotPinBtn: {
-    marginTop: 18,
-    paddingVertical: 10,
-    paddingHorizontal: 20
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginBottom: 4
   },
   forgotPinText: {
     fontSize: 13,
@@ -716,6 +802,22 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
     marginBottom: 16
   },
+  inModalErrorCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3F2',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#FECDCA'
+  },
+  inModalErrorText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: '#D92D20'
+  },
   pinInput: {
     backgroundColor: '#F8FAFC',
     borderRadius: 16,
@@ -738,6 +840,87 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   primaryBtnText: {
+    fontSize: 15,
+    fontFamily: 'Inter_700Bold',
+    color: '#172B3E'
+  },
+  /* Error Alert Modal Styles */
+  errorModalOverlay: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(23, 43, 62, 0.65)',
+    paddingHorizontal: 24
+  },
+  errorModalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 20,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20
+  },
+  errorIconBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FEF3F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14
+  },
+  errorModalTitle: {
+    fontSize: 18,
+    fontFamily: 'Inter_700Bold',
+    color: '#101828',
+    textAlign: 'center'
+  },
+  errorModalBody: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: '#667085',
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 20,
+    lineHeight: 20
+  },
+  errorModalBtn: {
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#D92D20',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  errorModalBtnText: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#FFFFFF'
+  },
+  successIconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#ECFDF3',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14
+  },
+  successModalBtn: {
+    flexDirection: 'row',
+    width: '100%',
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: '#05DA93',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  successModalBtnText: {
     fontSize: 15,
     fontFamily: 'Inter_700Bold',
     color: '#172B3E'

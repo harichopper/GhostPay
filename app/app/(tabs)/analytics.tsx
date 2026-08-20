@@ -26,7 +26,16 @@ export default function AnalyticsScreen() {
   const isDesktop = Platform.OS === 'web' && width > 768;
   const [analyticsKey, setAnalyticsKey] = useState(0);
   const [selectedPeriod, setSelectedPeriod] = useState<'month' | 'week' | 'year'>('month');
-  const [selectedBar, setSelectedBar] = useState(2);
+
+  // Compute Today's index (Mon..Sun order)
+  const initialTodayIdx = React.useMemo(() => {
+    const daysOrdered = [1, 2, 3, 4, 5, 6, 0];
+    const currentDay = new Date().getDay();
+    const idx = daysOrdered.indexOf(currentDay);
+    return idx >= 0 ? idx : 3;
+  }, []);
+
+  const [selectedBar, setSelectedBar] = useState<number>(initialTodayIdx);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState('Aug 2026');
   const [selectedYear, setSelectedYear] = useState(2026);
@@ -45,14 +54,15 @@ export default function AnalyticsScreen() {
         onChainCount: 0,
         onChainSumConverted: '0.00',
         onChainPct: 50,
+        todayIndex: 3,
         chartData: [
-          { day: 'Mon', amount: '0.00', height: 15 },
-          { day: 'Tue', amount: '0.00', height: 15 },
-          { day: 'Wed', amount: '0.00', height: 15 },
-          { day: 'Thu', amount: '0.00', height: 15 },
-          { day: 'Fri', amount: '0.00', height: 15 },
-          { day: 'Sat', amount: '0.00', height: 15 },
-          { day: 'Sun', amount: '0.00', height: 15 }
+          { day: 'Mon', amount: '0.00', height: 15, isToday: false, index: 0 },
+          { day: 'Tue', amount: '0.00', height: 15, isToday: false, index: 1 },
+          { day: 'Wed', amount: '0.00', height: 15, isToday: false, index: 2 },
+          { day: 'Thu', amount: '0.00', height: 15, isToday: true, index: 3 },
+          { day: 'Fri', amount: '0.00', height: 15, isToday: false, index: 4 },
+          { day: 'Sat', amount: '0.00', height: 15, isToday: false, index: 5 },
+          { day: 'Sun', amount: '0.00', height: 15, isToday: false, index: 6 }
         ],
         categories: [
           {
@@ -118,17 +128,22 @@ export default function AnalyticsScreen() {
 
     const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const daysOrdered = [1, 2, 3, 4, 5, 6, 0]; // Mon..Sun
+    const currentDayIdx = new Date().getDay();
+    const todayIndex = daysOrdered.indexOf(currentDayIdx);
 
     const maxDayVal = Math.max(...Object.values(daysSum), 1);
 
-    const chartData = daysOrdered.map((dIdx) => {
+    const chartData = daysOrdered.map((dIdx, idx) => {
       const algoVal = daysSum[dIdx] || 0;
       const convertedVal = algoVal * rate;
       const pct = Math.max(Math.round((algoVal / maxDayVal) * 85), 15);
+      const isToday = dIdx === currentDayIdx;
       return {
         day: dayLabels[dIdx],
         amount: convertedVal.toFixed(2),
-        height: pct
+        height: pct,
+        isToday,
+        index: idx
       };
     });
 
@@ -209,7 +224,8 @@ export default function AnalyticsScreen() {
       onChainSumConverted: (onChainSumAlgo * rate).toFixed(2),
       onChainPct,
       chartData,
-      categories
+      categories,
+      todayIndex
     };
   }, [transactions, walletAddress, rate, currencySymbol]);
 
@@ -301,7 +317,9 @@ export default function AnalyticsScreen() {
                       {/* Active Tooltip Pill */}
                       {isSelected && (
                         <View style={styles.chartTooltip}>
-                          <Text style={styles.chartTooltipText}>{currencySymbol}{item.amount}</Text>
+                          <Text style={styles.chartTooltipText} numberOfLines={1}>
+                            {currencySymbol}{item.amount}
+                          </Text>
                         </View>
                       )}
 
@@ -317,7 +335,7 @@ export default function AnalyticsScreen() {
                           end={{ x: 0, y: 1 }}
                         />
                       </View>
-                      <Text style={[styles.chartDayText, isSelected && styles.activeChartDayText]}>
+                      <Text style={[styles.chartDayText, isSelected && styles.activeChartDayText, item.isToday && styles.todayChartDayText]}>
                         {item.day}
                       </Text>
                     </Pressable>
@@ -630,17 +648,21 @@ const styles = StyleSheet.create({
   },
   chartTooltip: {
     position: 'absolute',
-    top: -22,
+    top: -26,
     backgroundColor: colors.primaryDark,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     borderRadius: 8,
-    zIndex: 5
+    zIndex: 10,
+    minWidth: 44,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   chartTooltipText: {
     color: colors.white,
     fontSize: 10,
-    fontFamily: 'Inter_700Bold'
+    fontFamily: 'Inter_700Bold',
+    textAlign: 'center'
   },
   barTrackContainer: {
     width: 14,
@@ -667,6 +689,10 @@ const styles = StyleSheet.create({
     marginTop: 8
   },
   activeChartDayText: {
+    color: '#12B76A',
+    fontFamily: 'Inter_700Bold'
+  },
+  todayChartDayText: {
     color: '#12B76A',
     fontFamily: 'Inter_700Bold'
   },
