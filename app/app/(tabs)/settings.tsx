@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
 import {
   Alert,
   Modal,
@@ -17,9 +17,39 @@ import {
   View
 } from 'react-native';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
-import Toast from 'react-native-toast-message';
+import Toast, { ToastConfigParams } from 'react-native-toast-message';
+import { useSecurityStore } from '../../src/store/securityStore';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
+import {
+  authenticateBiometric,
+  canUseBiometrics,
+  removePin,
+  savePin,
+  verifyPin
+} from '../../src/utils/security';
+
+type SecurityPinStep =
+  | 'create'
+  | 'confirmCreate'
+  | 'disableLock'
+  | 'verifyCurrentForChange'
+  | 'createChange'
+  | 'confirmChange'
+  | 'enableBiometric'
+  | 'disableBiometric';
+
+const pinToastConfig = {
+  error: ({ text1, text2 }: ToastConfigParams<any>) => (
+    <View style={styles.pinToastContainer}>
+      <Ionicons name="alert-circle" size={24} color="#F04438" style={styles.pinToastIcon} />
+      <View style={styles.pinToastTextContainer}>
+        {text1 ? <Text style={styles.pinToastTitle}>{text1}</Text> : null}
+        {text2 ? <Text style={styles.pinToastSubtitle}>{text2}</Text> : null}
+      </View>
+    </View>
+  )
+};
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -42,99 +72,129 @@ export default function SettingsScreen() {
     ? transactions.filter((t) => t.status === 'pending' || t.status === 'syncing').length
     : 0;
 
-  const [isPasscodeEnabled, setIsPasscodeEnabled] = useState(true);
-  const [biometricsEnabled, setBiometricsEnabled] = useState(true);
+  const appLockEnabled = useSecurityStore((state) => state.appLockEnabled);
+  const biometricEnabled = useSecurityStore((state) => state.biometricEnabled);
+  const enableAppLock = useSecurityStore((state) => state.enableAppLock);
+  const disableAppLock = useSecurityStore((state) => state.disableAppLock);
+  const enableBiometric = useSecurityStore((state) => state.enableBiometric);
+  const disableBiometric = useSecurityStore((state) => state.disableBiometric);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [ghostModeEnabled, setGhostModeEnabled] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
 
-  // PIN / Passcode Lock Modal States
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
-  const [savedPin, setSavedPin] = useState('1234');
   const [enteredPin, setEnteredPin] = useState('');
-  const [pinStep, setPinStep] = useState<'enter' | 'create' | 'confirm'>('create');
+  const [pinStep, setPinStep] = useState<SecurityPinStep>('create');
   const [tempPin, setTempPin] = useState('');
 
-  // Biometric Scan Modal States
-  const [isBioModalOpen, setIsBioModalOpen] = useState(false);
-  const [bioStatus, setBioStatus] = useState<'idle' | 'scanning' | 'success'>('idle');
-
-  const triggerBiometricScan = () => {
-    setIsBioModalOpen(true);
-    setBioStatus('scanning');
-    setTimeout(() => {
-      setBioStatus('success');
-      setTimeout(() => {
-        setIsBioModalOpen(false);
-        setBioStatus('idle');
-        setBiometricsEnabled(true);
-        Toast.show({
-          type: 'success',
-          text1: 'Biometric Authenticated',
-          text2: 'Fingerprint & Touch ID verified successfully!'
-        });
-      }, 800);
-    }, 1200);
+  const openPinModal = (step: SecurityPinStep) => {
+    setPinStep(step);
+    setEnteredPin('');
+    setTempPin('');
+    setIsPinModalOpen(true);
   };
 
-  // Handle Numeric Keypad Presses
-  const handleNumPress = (num: string) => {
-    if (enteredPin.length < 4) {
-      const nextPin = enteredPin + num;
-      setEnteredPin(nextPin);
+  const closePinModal = () => {
+    setEnteredPin('');
+    setTempPin('');
+    setIsPinModalOpen(false);
+  };
 
-      if (nextPin.length === 4) {
-        setTimeout(() => {
-          if (pinStep === 'create') {
-            setTempPin(nextPin);
-            setEnteredPin('');
-            setPinStep('confirm');
-          } else if (pinStep === 'confirm') {
-            if (nextPin === tempPin) {
-              setSavedPin(nextPin);
-              setIsPasscodeEnabled(true);
-              setIsPinModalOpen(false);
-              setEnteredPin('');
-              Toast.show({
-                type: 'success',
-                text1: 'PIN Lock Activated',
-                text2: `Your new 4-digit security PIN is set!`
-              });
-            } else {
-              setEnteredPin('');
-              Toast.show({
-                type: 'error',
-                text1: 'PIN Mismatch',
-                text2: 'PINs do not match. Please try again.'
-              });
-            }
-          } else {
-            // Unlock verification mode
-            if (nextPin === savedPin) {
-              setIsPinModalOpen(false);
-              setEnteredPin('');
-              Toast.show({
-                type: 'success',
-                text1: 'Unlocked Successfully',
-                text2: 'Security PIN verified'
-              });
-            } else {
-              setEnteredPin('');
-              Toast.show({
-                type: 'error',
-                text1: 'Incorrect PIN',
-                text2: 'The PIN you entered is incorrect.'
-              });
-            }
-          }
-        }, 150);
+  const handlePinComplete = async (pin: string) => {
+    try {
+      if (pinStep === 'create' || pinStep === 'createChange') {
+        setTempPin(pin);
+        setEnteredPin('');
+        setPinStep(pinStep === 'create' ? 'confirmCreate' : 'confirmChange');
+        return;
       }
+
+      if (pinStep === 'confirmCreate' || pinStep === 'confirmChange') {
+        if (pin !== tempPin) {
+          setEnteredPin('');
+          Toast.show({ type: 'error', text1: 'PIN Mismatch', text2: 'PINs do not match. Please try again.' });
+          return;
+        }
+
+        await savePin(pin);
+        if (pinStep === 'confirmCreate') {
+          enableAppLock();
+          Toast.show({ type: 'success', text1: 'PIN Lock Activated', text2: 'Your security PIN is set.' });
+        } else {
+          Toast.show({ type: 'success', text1: 'PIN Updated', text2: 'Your security PIN has been changed.' });
+        }
+        closePinModal();
+        return;
+      }
+
+      const isPinValid = await verifyPin(pin);
+      if (!isPinValid) {
+        setEnteredPin('');
+        if (pinStep === 'verifyCurrentForChange') {
+          Toast.show({
+            type: 'error',
+            text1: 'Incorrect PIN',
+            text2: 'Please try again.',
+            position: 'top',
+            topOffset: 72,
+            visibilityTime: 6000
+          });
+        } else {
+          Toast.show({ type: 'error', text1: 'Incorrect PIN', text2: 'Please try again.' });
+        }
+        return;
+      }
+
+      if (pinStep === 'disableLock') {
+        await removePin();
+        disableAppLock();
+        closePinModal();
+        Toast.show({ type: 'info', text1: 'PIN Lock Disabled', text2: 'App Lock has been turned off.' });
+        return;
+      }
+
+      if (pinStep === 'verifyCurrentForChange') {
+        setEnteredPin('');
+        setPinStep('createChange');
+        return;
+      }
+
+      if (pinStep === 'enableBiometric') {
+        const biometricsAvailable = await canUseBiometrics();
+        if (!biometricsAvailable || !(await authenticateBiometric())) {
+          setEnteredPin('');
+          Toast.show({ type: 'error', text1: 'Biometrics Unavailable', text2: 'Complete device biometric setup, then try again.' });
+          return;
+        }
+
+        enableBiometric();
+        closePinModal();
+        Toast.show({ type: 'success', text1: 'Biometrics Enabled', text2: 'Biometric unlock is now active.' });
+        return;
+      }
+
+      if (pinStep === 'disableBiometric') {
+        disableBiometric();
+        closePinModal();
+        Toast.show({ type: 'info', text1: 'Biometrics Disabled', text2: 'Biometric unlock has been turned off.' });
+      }
+    } catch {
+      setEnteredPin('');
+      Toast.show({ type: 'error', text1: 'Security Update Failed', text2: 'Please try again.' });
     }
   };
 
-  const handleBackspace = () => {
-    setEnteredPin((prev) => prev.slice(0, -1));
+  const handleNumPress = (num: string) => {
+    if (enteredPin.length >= 4) {
+      return;
+    }
+
+    const nextPin = enteredPin + num;
+    setEnteredPin(nextPin);
+    if (nextPin.length === 4) {
+      void handlePinComplete(nextPin);
+    }
   };
 
   const formattedAddress = walletAddress
@@ -301,24 +361,17 @@ export default function SettingsScreen() {
                   <View>
                     <Text style={styles.settingLabel}>PIN / Password Lock</Text>
                     <Text style={styles.settingSubLabel}>
-                      {isPasscodeEnabled ? '4-Digit Code Active (••••)' : 'Require PIN to open app'}
+                      {appLockEnabled ? '4-Digit Code Active (••••)' : 'Require PIN to open app'}
                     </Text>
                   </View>
                 </View>
                 <Switch
-                  value={isPasscodeEnabled}
+                  value={appLockEnabled}
                   onValueChange={(val) => {
                     if (val) {
-                      setPinStep('create');
-                      setEnteredPin('');
-                      setIsPinModalOpen(true);
+                      openPinModal('create');
                     } else {
-                      setIsPasscodeEnabled(false);
-                      Toast.show({
-                        type: 'info',
-                        text1: 'PIN Lock Disabled',
-                        text2: 'Password protection turned off'
-                      });
+                      openPinModal('disableLock');
                     }
                   }}
                   trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
@@ -327,16 +380,12 @@ export default function SettingsScreen() {
               </View>
 
               {/* Row 2: Change Security PIN (Separate Row) */}
-              {isPasscodeEnabled && (
+              {appLockEnabled && (
                 <>
                   <View style={styles.divider} />
                   <Pressable
                     style={styles.settingRow}
-                    onPress={() => {
-                      setPinStep('create');
-                      setEnteredPin('');
-                      setIsPinModalOpen(true);
-                    }}
+                    onPress={() => openPinModal('verifyCurrentForChange')}
                   >
                     <View style={styles.settingLeft}>
                       <View style={[styles.iconCircle, { backgroundColor: '#F0EBFB' }]}>
@@ -358,30 +407,34 @@ export default function SettingsScreen() {
               <View style={styles.settingRow}>
                 <Pressable
                   style={styles.settingLeft}
-                  onPress={triggerBiometricScan}
+                  onPress={() => {
+                    if (appLockEnabled) {
+                      openPinModal(biometricEnabled ? 'disableBiometric' : 'enableBiometric');
+                    }
+                  }}
                 >
                   <View style={[styles.iconCircle, { backgroundColor: '#E4F2EB' }]}>
                     <Ionicons name="finger-print" size={20} color="#12B76A" />
                   </View>
                   <View>
-                    <Text style={styles.settingLabel}>Fingerprint & Face ID</Text>
+                    <Text style={styles.settingLabel}>Biometric Lock</Text>
                     <Text style={styles.settingSubLabel}>
-                      {biometricsEnabled ? 'Active • Tap to test scanner' : 'Tap to enable biometrics'}
+                      {biometricEnabled
+                        ? 'Active • PIN required to disable'
+                        : appLockEnabled
+                        ? 'PIN and biometric verification required'
+                        : 'Enable App Lock first'}
                     </Text>
                   </View>
                 </Pressable>
                 <Switch
-                  value={biometricsEnabled}
+                  value={biometricEnabled}
+                  disabled={!appLockEnabled}
                   onValueChange={(val) => {
                     if (val) {
-                      triggerBiometricScan();
+                      openPinModal('enableBiometric');
                     } else {
-                      setBiometricsEnabled(false);
-                      Toast.show({
-                        type: 'info',
-                        text1: 'Biometrics Disabled',
-                        text2: 'Fingerprint & Face ID turned off'
-                      });
+                      openPinModal('disableBiometric');
                     }
                   }}
                   trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
@@ -560,17 +613,15 @@ export default function SettingsScreen() {
         visible={isPinModalOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setIsPinModalOpen(false)}
+        onRequestClose={closePinModal}
       >
         <View style={styles.pinModalOverlay}>
+          <Toast config={pinToastConfig} />
           <Animated.View entering={ZoomIn.duration(300)} style={styles.pinModalCard}>
             {/* Close Icon */}
             <Pressable
               style={styles.pinModalCloseBtn}
-              onPress={() => {
-                setIsPinModalOpen(false);
-                setEnteredPin('');
-              }}
+              onPress={closePinModal}
             >
               <Ionicons name="close" size={20} color={colors.white} />
             </Pressable>
@@ -584,16 +635,26 @@ export default function SettingsScreen() {
             <Text style={styles.pinModalTitle}>
               {pinStep === 'create'
                 ? 'Set 4-Digit Security PIN'
-                : pinStep === 'confirm'
+                : pinStep === 'confirmCreate'
                 ? 'Confirm Your Security PIN'
-                : 'Enter Security PIN'}
+                : pinStep === 'verifyCurrentForChange'
+                ? 'Verify Current PIN'
+                : pinStep === 'createChange'
+                ? 'Set New Security PIN'
+                : pinStep === 'confirmChange'
+                ? 'Confirm New Security PIN'
+                : pinStep === 'disableLock'
+                ? 'Disable App Lock'
+                : pinStep === 'enableBiometric'
+                ? 'Verify PIN to Enable Biometrics'
+                : 'Verify PIN to Disable Biometrics'}
             </Text>
             <Text style={styles.pinModalSub}>
               {pinStep === 'create'
                 ? 'Enter a 4-digit code to lock GhostPay'
-                : pinStep === 'confirm'
+                : pinStep === 'confirmCreate' || pinStep === 'confirmChange'
                 ? 'Re-enter your 4-digit PIN to confirm'
-                : 'Verify your PIN to unlock'}
+                : 'Enter your current 4-digit PIN to continue'}
             </Text>
 
             {/* 4 Passcode Dots */}
@@ -617,10 +678,7 @@ export default function SettingsScreen() {
                     <Pressable
                       key={key}
                       style={styles.keypadButtonSpecial}
-                      onPress={() => {
-                        setIsPinModalOpen(false);
-                        setEnteredPin('');
-                      }}
+                      onPress={closePinModal}
                     >
                       <Text style={styles.keypadCancelText}>Cancel</Text>
                     </Pressable>
@@ -632,7 +690,7 @@ export default function SettingsScreen() {
                     <Pressable
                       key={key}
                       style={styles.keypadButtonSpecial}
-                      onPress={handleBackspace}
+                      onPress={() => setEnteredPin((current) => current.slice(0, -1))}
                     >
                       <Ionicons name="backspace-outline" size={24} color={colors.white} />
                     </Pressable>
@@ -654,66 +712,6 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Biometric / Fingerprint Verification Modal */}
-      <Modal
-        visible={isBioModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsBioModalOpen(false)}
-      >
-        <View style={styles.pinModalOverlay}>
-          <Animated.View entering={ZoomIn.duration(300)} style={styles.bioModalCard}>
-            {/* Close Button */}
-            <Pressable
-              style={styles.pinModalCloseBtn}
-              onPress={() => setIsBioModalOpen(false)}
-            >
-              <Ionicons name="close" size={20} color={colors.white} />
-            </Pressable>
-
-            {/* Glowing Fingerprint Sensor Button */}
-            <Pressable style={styles.bioSensorCircle} onPress={triggerBiometricScan}>
-              <Ionicons
-                name="finger-print"
-                size={54}
-                color={bioStatus === 'success' ? '#12B76A' : colors.secondary}
-              />
-            </Pressable>
-
-            <Text style={styles.pinModalTitle}>
-              {bioStatus === 'scanning'
-                ? 'Scanning Fingerprint...'
-                : bioStatus === 'success'
-                ? 'Biometric Verified!'
-                : 'Touch Fingerprint Sensor'}
-            </Text>
-            <Text style={styles.pinModalSub}>
-              {bioStatus === 'scanning'
-                ? 'Hold your finger steady on the sensor'
-                : bioStatus === 'success'
-                ? 'Touch ID & Face ID authenticated successfully'
-                : 'Place your finger on the sensor or camera to verify'}
-            </Text>
-
-            {/* Status Pill Indicator */}
-            <View style={[styles.bioStatusPill, bioStatus === 'success' && styles.bioStatusPillSuccess]}>
-              <Ionicons
-                name={bioStatus === 'success' ? 'checkmark-circle' : 'scan'}
-                size={16}
-                color={bioStatus === 'success' ? '#12B76A' : colors.secondary}
-                style={{ marginRight: 6 }}
-              />
-              <Text style={[styles.bioStatusPillText, bioStatus === 'success' && styles.bioStatusPillTextSuccess]}>
-                {bioStatus === 'scanning'
-                  ? 'Authenticating...'
-                  : bioStatus === 'success'
-                  ? 'Access Granted'
-                  : 'Touch Sensor'}
-              </Text>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -976,6 +974,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20
+  },
+  pinToastContainer: {
+    width: '90%',
+    maxWidth: 420,
+    backgroundColor: '#172B3E',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(240, 68, 56, 0.4)',
+    borderLeftWidth: 5,
+    borderLeftColor: '#F04438',
+    elevation: 12,
+    shadowColor: '#F04438',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12
+  },
+  pinToastIcon: {
+    marginRight: 12
+  },
+  pinToastTextContainer: {
+    flex: 1
+  },
+  pinToastTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    marginBottom: 2
+  },
+  pinToastSubtitle: {
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium'
   },
   pinModalCard: {
     width: '100%',
