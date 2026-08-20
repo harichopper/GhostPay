@@ -15,7 +15,7 @@ import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
-import { AppState, AppStateStatus, Image, LogBox, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, AppStateStatus, Animated, Image, LogBox, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 LogBox.ignoreLogs([
   "It looks like you're running in react-native",
@@ -89,17 +89,23 @@ export default function RootLayout() {
   const biometricEnabled = useSecurityStore((state) => state.biometricEnabled);
   const unlock = useSecurityStore((state) => state.unlock);
 
+  const [splashOpacity] = useState(() => new Animated.Value(1));
+
   useEffect(() => {
     hydrateSampleData();
     void loadNetworkInfo();
 
-    const loaderTimer = setTimeout(() => {
-      setIsAppLoading(false);
-      void SplashScreen.hideAsync().catch(() => { });
-    }, 500);
-
-    return () => clearTimeout(loaderTimer);
-  }, [fontsLoaded]);
+    if (fontsLoaded) {
+      Animated.timing(splashOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true
+      }).start(() => {
+        setIsAppLoading(false);
+        void SplashScreen.hideAsync().catch(() => { });
+      });
+    }
+  }, [fontsLoaded, splashOpacity]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -275,11 +281,10 @@ export default function RootLayout() {
       <Pressable style={splashStyles.fullScreenOverlay} onPress={() => void SplashScreen.hideAsync().catch(() => { })}>
         <StatusBar style="light" />
         <Image
-          source={require('../assets/branding/ghostpay-logo.png')}
+          source={require('../assets/app_logo/ghostpay-logo-removebg.png')}
           style={splashStyles.logoImage}
           resizeMode="contain"
         />
-        <Text style={splashStyles.connectingTextFallback}>Connecting...</Text>
       </Pressable>
     );
   }
@@ -297,21 +302,17 @@ export default function RootLayout() {
       {Platform.OS !== 'web' || isClientMounted ? <Toast config={toastConfig} /> : null}
 
       {isAppLoading && (
-        <Pressable
-          style={splashStyles.fullScreenOverlay}
-          onPress={() => {
-            setIsAppLoading(false);
-            void SplashScreen.hideAsync().catch(() => { });
-          }}
+        <Animated.View
+          style={[splashStyles.fullScreenOverlay, { opacity: splashOpacity }]}
+          pointerEvents="none"
         >
           <StatusBar style="light" />
           <Image
-            source={require('../assets/branding/ghostpay-logo.png')}
+            source={require('../assets/app_logo/ghostpay-logo-removebg.png')}
             style={splashStyles.logoImage}
             resizeMode="contain"
           />
-          <Text style={splashStyles.connectingText}>Connecting...</Text>
-        </Pressable>
+        </Animated.View>
       )}
       {isSecurityReady && isLocked && !isAppLoading ? (
         <LockScreen
@@ -390,21 +391,8 @@ const splashStyles = StyleSheet.create({
     elevation: 99999
   },
   logoImage: {
-    width: 184,
-    height: 184
-  },
-  connectingTextFallback: {
-    color: '#05DA93',
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 18,
-    letterSpacing: 1.2
-  },
-  connectingText: {
-    color: '#05DA93',
-    fontSize: 13,
-    fontFamily: 'Inter_600SemiBold',
-    marginTop: 18,
-    letterSpacing: 1.2
+    width: 250,
+    height: 250,
+    borderRadius: 40
   }
 });
