@@ -32,7 +32,13 @@ import Toast from 'react-native-toast-message';
 import { WalletOnboardingCard } from '../../src/components/WalletOnboardingCard';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
-import { lookupWalletsByMobile, lookupIdentityByWallet, fetchWalletRiskScore } from '../../src/services/api';
+import {
+  lookupWalletsByMobile,
+  lookupIdentityByWallet,
+  fetchWalletRiskScore,
+  validateReceiverMerchant,
+  analyzeTransactionFraud
+} from '../../src/services/api';
 import type { GhostTransaction } from '../../src/types/transaction';
 
 export function parsePaymentQr(qrData: string) {
@@ -318,19 +324,37 @@ export default function SendScreen() {
       const targetAddress = recipientIdentity?.primaryAddress || recipient.trim();
       const X402_MERCHANT_VAULT = 'EI5WNOWDB2S5MOHNVZXNVUULCKBMUG4BC5AZUAL2S5T2PZ5DW2FCF4KYCA';
 
-      // Step 1: Execute On-Chain 0.005 ALGO x402 Micro-Payment Transfer to Security Vault
-      setProcessingStatus('Deducting 0.005 ALGO x402 AI Security Micro-Fee...');
+      // Step 1: Execute On-Chain 0.005 ALGO x402 Micro-Payment Transfer
+      setProcessingStatus('x402 Micro-Fee: Deducting 0.005 ALGO...');
       await enqueueOfflinePayment(X402_MERCHANT_VAULT, 0.005);
 
-      // Step 2: Micro-payment x402 Pre-flight Security Verification
-      setProcessingStatus('Verifying x402 AI Risk Scan Clearance...');
-      const riskAssessment = await fetchWalletRiskScore(walletAddress, targetAddress);
+      // x402 Security Check 1: Merchant & Receiver Validation ($0.005)
+      setProcessingStatus('1/3 x402: Validating Merchant Identity...');
+      const merchantCheck = await validateReceiverMerchant(targetAddress, walletAddress);
+      if (merchantCheck && merchantCheck.data && merchantCheck.data.merchantVerified === false) {
+        throw new Error('Security Alert: Unverified or flagged receiver merchant identity.');
+      }
 
+      // x402 Security Check 2: Wallet Threat & Risk Scan ($0.005)
+      setProcessingStatus('2/3 x402: Scanning Threat Score & Wallet Risk...');
+      const riskAssessment = await fetchWalletRiskScore(walletAddress, targetAddress);
       if (riskAssessment && riskAssessment.data && riskAssessment.data.canMakePayment === false) {
         throw new Error(`Security Alert: High risk detected for recipient. Risk score: ${riskAssessment.data.riskScore}/10.`);
       }
 
-      // Step 3: Processing Main Payment on Algorand Blockchain
+      // x402 Security Check 3: Invoice & Payment Fraud Analysis ($0.10)
+      setProcessingStatus('3/3 x402: Running Pre-flight Fraud Analysis...');
+      const fraudCheck = await analyzeTransactionFraud({
+        senderWallet: walletAddress,
+        receiverWallet: targetAddress,
+        amount: numericAmount,
+        asset: currencyMode
+      });
+      if (fraudCheck && fraudCheck.data && fraudCheck.data.recommendation === 'REJECT') {
+        throw new Error('Security Alert: Fraud detector flagged this payment as suspicious.');
+      }
+
+      // Final Step: Executing Main Payment Transfer on Algorand Blockchain
       setProcessingStatus(`Executing ${numericAmount} ${currencyMode} Transfer...`);
       await new Promise((res) => setTimeout(res, 500));
 
@@ -338,8 +362,8 @@ export default function SendScreen() {
 
       Toast.show({
         type: 'success',
-        text1: isConnected ? 'Payment Sent!' : 'Payment Queued Offline',
-        text2: `${numericAmount} ${currencyMode} (+0.005 micro-fee) confirmed!`
+        text1: isConnected ? 'Payment Confirmed!' : 'Payment Queued Offline',
+        text2: `${numericAmount} ${currencyMode} sent with 3x x402 AI Protection`
       });
       setAmount('');
       setRecipient('');
