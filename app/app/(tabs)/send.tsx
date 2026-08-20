@@ -32,7 +32,7 @@ import Toast from 'react-native-toast-message';
 import { WalletOnboardingCard } from '../../src/components/WalletOnboardingCard';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
-import { lookupWalletsByMobile, lookupIdentityByWallet } from '../../src/services/api';
+import { lookupWalletsByMobile, lookupIdentityByWallet, fetchWalletRiskScore } from '../../src/services/api';
 import type { GhostTransaction } from '../../src/types/transaction';
 
 export function parsePaymentQr(qrData: string) {
@@ -298,6 +298,7 @@ export default function SendScreen() {
   };
 
   const [errorModalMessage, setErrorModalMessage] = useState<string | null>(null);
+  const [processingStatus, setProcessingStatus] = useState<string | null>(null);
 
   const handleSendPayment = async () => {
     if (!recipient.trim()) {
@@ -312,12 +313,28 @@ export default function SendScreen() {
     }
 
     setIsSubmitting(true);
+    setProcessingStatus('Verifying x402 AI Risk Scan...');
+
     try {
-      await enqueueOfflinePayment(recipient, numericAmount);
+      const targetAddress = recipientIdentity?.primaryAddress || recipient.trim();
+
+      // Step 1: Micro-payment x402 Pre-flight Security Verification
+      const riskAssessment = await fetchWalletRiskScore(walletAddress, targetAddress);
+
+      if (riskAssessment && riskAssessment.data && riskAssessment.data.canMakePayment === false) {
+        throw new Error(`Security Alert: High risk detected for recipient. Risk score: ${riskAssessment.data.riskScore}/10.`);
+      }
+
+      // Step 2: Processing Payment on Algorand Blockchain
+      setProcessingStatus('Processing Algorand Payment...');
+      await new Promise((res) => setTimeout(res, 500));
+
+      await enqueueOfflinePayment(targetAddress, numericAmount);
+
       Toast.show({
         type: 'success',
         text1: isConnected ? 'Payment Sent!' : 'Payment Queued Offline',
-        text2: `${numericAmount} ${currencyMode} to ${recipient.slice(0, 10)}...`
+        text2: `${numericAmount} ${currencyMode} sent to ${targetAddress.slice(0, 10)}...`
       });
       setAmount('');
       setRecipient('');
@@ -325,6 +342,7 @@ export default function SendScreen() {
       setErrorModalMessage(err?.message || 'Failed to process payment.');
     } finally {
       setIsSubmitting(false);
+      setProcessingStatus(null);
     }
   };
 
@@ -621,6 +639,23 @@ export default function SendScreen() {
           </View>
         </Modal>
       )}
+
+      {/* Custom Payment Processing Modal */}
+      <Modal
+        visible={Boolean(processingStatus)}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.errorModalOverlay}>
+          <View style={styles.processingModalCard}>
+            <View style={styles.processingIconBadge}>
+              <ActivityIndicator size="large" color="#05DA93" />
+            </View>
+            <Text style={styles.processingModalTitle}>AI Guard Active</Text>
+            <Text style={styles.processingModalBody}>{processingStatus}</Text>
+          </View>
+        </View>
+      </Modal>
 
       {/* Custom Payment Error Alert Modal */}
       <Modal
@@ -1246,6 +1281,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8
+  },
+  processingModalCard: {
+    width: '85%',
+    maxWidth: 340,
+    backgroundColor: '#172B3E',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(5, 218, 147, 0.3)',
+    elevation: 10
+  },
+  processingIconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(5, 218, 147, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16
+  },
+  processingModalTitle: {
+    fontSize: 18,
+    fontFamily: 'Orbitron_700Bold',
+    color: '#FFFFFF',
+    textAlign: 'center'
+  },
+  processingModalBody: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#05DA93',
+    textAlign: 'center',
+    marginTop: 10,
+    lineHeight: 20
   },
   primaryModalBtnActionText: {
     fontSize: 14,
