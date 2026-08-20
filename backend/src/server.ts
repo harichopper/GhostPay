@@ -8,6 +8,7 @@ import { buildOpenApiSpec } from './docs/openapi.js';
 import { accountRouter } from './routes/accountRoutes.js';
 import { algorandRouter } from './routes/algorandRoutes.js';
 import { identityRouter } from './routes/identityRoutes.js';
+import { notificationRouter } from './routes/notificationRoutes.js';
 
 const app = express();
 
@@ -44,6 +45,7 @@ app.get('/health', (_request, response) => {
 app.use('/api/algorand', algorandRouter);
 app.use('/api/identity', identityRouter);
 app.use('/api/accounts', accountRouter);
+app.use('/api/notifications', notificationRouter);
 
 // ── Swagger UI ────────────────────────────────────────────────────────────────
 // Available at /api/docs in all environments.

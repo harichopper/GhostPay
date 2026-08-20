@@ -2,7 +2,7 @@ import algosdk from 'algosdk';
 import { Buffer } from 'buffer';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { fetchBalanceFromApi, fetchNetworkInfo, sendTransactionToAlgorand } from '../services/api';
+import { fetchBalanceFromApi, fetchNetworkInfo, sendTransactionToAlgorand, fetchTransactionsFromApi } from '../services/api';
 import { platformStorage } from '../storage/platformStorage';
 import { loadWalletSecretKey, saveWalletSecretKey, savePendingMnemonic, clearWalletSecretKey } from '../storage/walletSecretStorage';
 import type { GhostTransaction } from '../types/transaction';
@@ -69,6 +69,8 @@ type WalletState = {
   displayCurrency: 'USD' | 'INR' | 'EUR';
   setDisplayCurrency: (currency: 'USD' | 'INR' | 'EUR') => void;
   algoRates: { USD: number; INR: number; EUR: number };
+  notificationsClearedAt: string | null;
+  setNotificationsClearedAt: (date: string | null) => void;
   fetchExchangeRates: () => Promise<void>;
   hydrateSampleData: () => void;
   loadNetworkInfo: () => Promise<boolean>;
@@ -188,6 +190,8 @@ export const useWalletStore = create<WalletState>()(
       setUserName: (name) => set({ userName: name }),
       displayCurrency: 'USD',
       setDisplayCurrency: (currency) => set({ displayCurrency: currency }),
+      notificationsClearedAt: null,
+      setNotificationsClearedAt: (date) => set({ notificationsClearedAt: date }),
       algoRates: { USD: 0.15, INR: 12.5, EUR: 0.14 },
       fetchExchangeRates: async () => {
         try {
@@ -247,9 +251,9 @@ export const useWalletStore = create<WalletState>()(
             demoMode: info.demoModeAllowed
               ? state.demoMode
               : {
-                  ...state.demoMode,
-                  simulateSyncSuccess: false
-                }
+                ...state.demoMode,
+                simulateSyncSuccess: false
+              }
           }));
           return true;
         } catch {
@@ -409,6 +413,12 @@ export const useWalletStore = create<WalletState>()(
         };
 
         set({ transactions: [transaction, ...transactions] });
+
+        // If online, immediately broadcast to Algorand node
+        if (getEffectiveOnline(get().isConnected, get().demoMode)) {
+          void get().syncPendingTransactions();
+        }
+
         return transaction;
       },
 
@@ -507,10 +517,11 @@ export const useWalletStore = create<WalletState>()(
         }
 
         set({ isSyncing: false });
+        void get().refreshBalance();
       },
 
       refreshBalance: async () => {
-        const { walletAddress, fetchExchangeRates } = get();
+        const { walletAddress, fetchExchangeRates, transactions: localTxs } = get();
         if (!walletAddress) {
           return;
         }
@@ -522,6 +533,25 @@ export const useWalletStore = create<WalletState>()(
           set({ balanceAlgo, lastBalanceRefreshAt: new Date().toISOString() });
         } catch {
           set({ balanceAlgo: null });
+        }
+
+        try {
+          const apiTxs = await fetchTransactionsFromApi(walletAddress);
+          if (apiTxs && apiTxs.length > 0) {
+            const map = new Map<string, GhostTransaction>();
+            localTxs.forEach((t) => map.set(t.id, t));
+            apiTxs.forEach((t) => {
+              if (!map.has(t.id)) {
+                map.set(t.id, t);
+              }
+            });
+            const merged = Array.from(map.values()).sort(
+              (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+            );
+            set({ transactions: merged });
+          }
+        } catch {
+          // Ignore transaction fetch errors when offline
         }
       }
     }),
@@ -542,7 +572,8 @@ export const useWalletStore = create<WalletState>()(
         demoMode: state.demoMode,
         verifiedPhone: state.verifiedPhone,
         userName: state.userName,
-        displayCurrency: state.displayCurrency
+        displayCurrency: state.displayCurrency,
+        notificationsClearedAt: state.notificationsClearedAt
       })
     }
   )

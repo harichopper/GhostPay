@@ -265,6 +265,7 @@ export async function getWalletsByMobile(mobileNumberRaw: string) {
   return {
     mobileNumber,
     verified: identity.verified,
+    name: identity.name,
     wallets
   };
 }
@@ -296,6 +297,7 @@ export async function getIdentityByWallet(walletAddressRaw: string) {
   return {
     mobileNumber: identity.mobileNumber,
     verified: identity.verified,
+    name: identity.name,
     wallets: identity.wallets
   };
 }

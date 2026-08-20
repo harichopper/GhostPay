@@ -60,6 +60,43 @@ export async function getAccountBalance(address: string): Promise<number> {
   return Number(accountInfo.amount) / 1_000_000;
 }
 
+export async function getAccountTransactions(address: string) {
+  const indexerBaseUrl = env.algorandNetwork === 'mainnet'
+    ? 'https://mainnet-idx.algonode.cloud'
+    : 'https://testnet-idx.algonode.cloud';
+
+  try {
+    const res = await fetch(`${indexerBaseUrl}/v2/accounts/${address}/transactions?limit=35`);
+    if (!res.ok) {
+      return [];
+    }
+    const data = (await res.json()) as { transactions?: any[] };
+    const rawTxs = data.transactions || [];
+
+    return rawTxs.map((tx: any) => {
+      const isPayment = tx['tx-type'] === 'pay';
+      const paymentDetails = tx['payment-transaction'] || {};
+      const amountMicro = paymentDetails.amount || tx.fee || 0;
+      const sender = tx.sender || '';
+      const receiver = paymentDetails.receiver || sender;
+
+      return {
+        id: tx.id || `tx-${Date.now()}`,
+        sender,
+        receiver,
+        amount: amountMicro / 1_000_000,
+        timestamp: tx['round-time'] ? new Date(tx['round-time'] * 1000).toISOString() : new Date().toISOString(),
+        status: 'confirmed',
+        txHash: tx.id,
+        explorerUrl: `${env.explorerTxBaseUrl}${tx.id}`,
+        network: env.algorandNetwork
+      };
+    });
+  } catch (err) {
+    return [];
+  }
+}
+
 export async function getAccountAssets(address: string): Promise<AccountAsset[]> {
   const algod = getAlgodClient();
   const accountInfo = await algod.accountInformation(address).do() as {

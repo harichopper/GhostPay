@@ -50,6 +50,26 @@ export async function fetchAccountAssets(address: string): Promise<AccountAsset[
   return data.assets;
 }
 
+export async function fetchTransactionsFromApi(address: string) {
+  const response = await fetch(`${API_BASE_URL}/api/algorand/transactions/${address}`);
+  const data = await parseApiResponse<{ transactions: any[] }>(response);
+  return data.transactions;
+}
+
+export async function fetchNotificationsFromApi(address: string) {
+  const response = await fetch(`${API_BASE_URL}/api/notifications/${address}`);
+  const data = await parseApiResponse<{ notifications: any[] }>(response);
+  return data.notifications;
+}
+
+export async function markNotificationReadInApi(id: string) {
+  await fetch(`${API_BASE_URL}/api/notifications/${id}/read`, { method: 'PATCH' });
+}
+
+export async function clearNotificationsInApi(address: string) {
+  await fetch(`${API_BASE_URL}/api/notifications/${address}`, { method: 'DELETE' });
+}
+
 export async function mintTestAsset(payload: MintAssetPayload): Promise<MintAssetResponse> {
   const response = await fetch(`${API_BASE_URL}/api/algorand/mint`, {
     method: 'POST',

@@ -2,10 +2,11 @@ import { Router } from 'express';
 import algosdk from 'algosdk';
 import { env } from '../config/env.js';
 import { isMongoConfigured } from '../db/mongo.js';
-import { getIdentityByWallet } from '../services/identityService.js';
+import { getIdentityByWallet, getWalletsByMobile } from '../services/identityService.js';
 import {
   getAccountAssets,
   getAccountBalance,
+  getAccountTransactions,
   getNetworkInfo,
   getSignerAddress,
   sendAlgoPayment
@@ -142,6 +143,24 @@ algorandRouter.get('/assets/:address', async (request, response) => {
   }
 });
 
+algorandRouter.get('/transactions/:address', async (request, response) => {
+  try {
+    const { address } = request.params;
+
+    if (!algosdk.isValidAddress(address)) {
+      response.status(400).json({ error: 'Invalid Algorand address' });
+      return;
+    }
+
+    const transactions = await getAccountTransactions(address);
+    response.json({ transactions });
+  } catch (error) {
+    response.status(500).json({
+      error: error instanceof Error ? error.message : 'Unable to load transactions'
+    });
+  }
+});
+
 algorandRouter.post('/send', async (request, response) => {
   try {
     const { sender, receiver, amount, timestamp, signedTxnBase64, demoMode } = request.body as {
@@ -178,7 +197,20 @@ algorandRouter.post('/send', async (request, response) => {
       return;
     }
 
-    if (!algosdk.isValidAddress(sender) || !algosdk.isValidAddress(receiver)) {
+    let targetReceiver = receiver.trim();
+    if (!algosdk.isValidAddress(targetReceiver) && targetReceiver.replace(/\D/g, '').length >= 8) {
+      try {
+        const lookup = await getWalletsByMobile(targetReceiver);
+        if (lookup && lookup.wallets && lookup.wallets.length > 0) {
+          const primary = lookup.wallets.find((w) => w.isDefault) || lookup.wallets[0];
+          targetReceiver = primary.address;
+        }
+      } catch {
+        // Fallback
+      }
+    }
+
+    if (!algosdk.isValidAddress(sender) || !algosdk.isValidAddress(targetReceiver)) {
       response.status(400).json({ error: 'Invalid Algorand sender or receiver address' });
       return;
     }

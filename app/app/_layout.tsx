@@ -85,21 +85,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     hydrateSampleData();
-    void loadNetworkInfo().then((success) => {
-      if (success) {
-        Toast.show({
-          type: 'success',
-          text1: 'Backend Connected',
-          text2: 'Successfully synced network settings.'
-        });
-      } else {
-        Toast.show({
-          type: 'error',
-          text1: 'Backend Offline',
-          text2: 'Could not connect to the backend server.'
-        });
-      }
-    });
+    void loadNetworkInfo();
 
     const loaderTimer = setTimeout(() => {
       setIsAppLoading(false);

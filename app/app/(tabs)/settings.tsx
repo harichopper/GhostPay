@@ -84,7 +84,6 @@ export default function SettingsScreen() {
   const enableBiometric = useSecurityStore((state) => state.enableBiometric);
   const disableBiometric = useSecurityStore((state) => state.disableBiometric);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [ghostModeEnabled, setGhostModeEnabled] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
 
@@ -463,39 +462,6 @@ export default function SettingsScreen() {
                   thumbColor={colors.white}
                 />
               </View>
-
-              {Boolean(walletAddress) && (
-                <>
-                  <View style={styles.divider} />
-
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingLeft}>
-                      <View style={[styles.iconCircle, { backgroundColor: '#F0EBFB' }]}>
-                        <Ionicons name="eye-off" size={20} color="#7F56D9" />
-                      </View>
-                      <Text style={styles.settingLabel}>Ghost Stealth Mode</Text>
-                    </View>
-                    <Switch
-                      value={ghostModeEnabled}
-                      onValueChange={setGhostModeEnabled}
-                      trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
-                      thumbColor={colors.white}
-                    />
-                  </View>
-
-                  <View style={styles.divider} />
-
-                  <Pressable style={styles.settingRow} onPress={() => Alert.alert('Backup Seed Phrase', 'Your 24-word recovery seed is encrypted.')}>
-                    <View style={styles.settingLeft}>
-                      <View style={[styles.iconCircle, { backgroundColor: '#FEF0C7' }]}>
-                        <Ionicons name="key" size={20} color="#DC6803" />
-                      </View>
-                      <Text style={styles.settingLabel}>Backup Mnemonic Phrase</Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
-                  </Pressable>
-                </>
-              )}
             </View>
           </View>
 

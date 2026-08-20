@@ -29,11 +29,13 @@ interface SampleTx {
   type: 'Received' | 'Paid';
   amount: string;
   isPositive: boolean;
-  dateGroup: 'Today' | 'Yesterday' | '19 November';
+  dateGroup: string;
   iconBg: string;
   iconText?: string;
   iconName?: keyof typeof Ionicons.glyphMap;
   avatarUrl?: string;
+  statusText?: string;
+  formattedTime?: string;
 }
 
 const SAMPLE_TRANSACTIONS: SampleTx[] = [
@@ -131,15 +133,20 @@ export default function TransactionsScreen() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleOpenDetail = (item: SampleTx) => {
-    setSelectedTx({
-      id: item.id,
-      sender: item.isPositive ? 'GBRNCKUL...CCB2' : (walletAddress || 'GBRNCKUL...CCB2'),
-      receiver: item.isPositive ? (walletAddress || 'GBRNCKUL...CCB2') : 'GBRNCKUL...CCB2',
-      amount: parseFloat(item.amount.replace(/[^0-9.]/g, '')) || 50,
-      timestamp: item.dateGroup === 'Today' ? 'Tuesday, Feb 3, 2026 • 11:32 PM' : 'Nov 19, 2025 • 4:15 PM',
-      status: 'confirmed',
-      txHash: '6e268a9b1c0d4fe2'
-    });
+    const matchedStoreTx = storeTransactions?.find((t) => t.id === item.id);
+    if (matchedStoreTx) {
+      setSelectedTx(matchedStoreTx);
+    } else {
+      setSelectedTx({
+        id: item.id,
+        sender: item.isPositive ? 'GBRNCKUL...CCB2' : (walletAddress || 'GBRNCKUL...CCB2'),
+        receiver: item.isPositive ? (walletAddress || 'GBRNCKUL...CCB2') : 'GBRNCKUL...CCB2',
+        amount: parseFloat(item.amount.replace(/[^0-9.]/g, '')) || 50,
+        timestamp: item.dateGroup === 'Today' ? 'Tuesday, Feb 3, 2026 • 11:32 PM' : 'Nov 19, 2025 • 4:15 PM',
+        status: 'confirmed',
+        txHash: '6e268a9b1c0d4fe2'
+      });
+    }
     setIsModalOpen(true);
   };
 
@@ -157,22 +164,42 @@ export default function TransactionsScreen() {
 
   const displayWalletText = formattedWalletAddress !== '•••• ' ? formattedWalletAddress : selectedWalletLabel;
 
-  // Combine real store transactions with sample data for a complete view
+  // Show real store transactions for the connected wallet
   const allTxList = useMemo(() => {
     if (storeTransactions && storeTransactions.length > 0) {
-      const convertedStoreTx: SampleTx[] = storeTransactions.map((tx) => ({
-        id: tx.id,
-        name: tx.receiver ? `To ${tx.receiver.slice(0, 8)}...` : 'Transfer',
-        type: tx.sender === walletAddress ? 'Paid' : 'Received',
-        amount: `${tx.sender === walletAddress ? '-' : '+'}${tx.amount} ALGO`,
-        isPositive: tx.sender !== walletAddress,
-        dateGroup: 'Today',
-        iconBg: colors.accent,
-        iconName: 'swap-horizontal'
-      }));
-      return [...convertedStoreTx, ...SAMPLE_TRANSACTIONS];
+      const convertedStoreTx: SampleTx[] = storeTransactions.map((tx) => {
+        const isPaid = tx.sender?.toLowerCase() === (walletAddress || '').toLowerCase();
+        const target = isPaid ? (tx.receiver || 'Recipient') : (tx.sender || 'Sender');
+        const isPhone = target.replace(/\D/g, '').length >= 8 && target.length < 50;
+        const displayName = isPhone
+          ? target
+          : `${target.substring(0, 6)}...${target.substring(target.length - 4)}`;
+
+        const txDate = tx.timestamp ? new Date(tx.timestamp) : new Date();
+        const today = new Date();
+        const isToday = txDate.toDateString() === today.toDateString();
+        const dateGroup = isToday ? 'Today' : txDate.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+        const formattedTime = isNaN(txDate.getTime())
+          ? 'Recently'
+          : txDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        const statusText = tx.status === 'confirmed' ? 'Confirmed' : 'Pending Sync';
+
+        return {
+          id: tx.id,
+          name: isPaid ? `To ${displayName}` : `From ${displayName}`,
+          type: isPaid ? 'Paid' : 'Received',
+          amount: `${isPaid ? '-' : '+'}${tx.amount.toFixed(2)} ALGO`,
+          isPositive: !isPaid,
+          dateGroup,
+          iconBg: isPaid ? '#172B3E' : '#05DA93',
+          iconName: isPaid ? 'arrow-up-circle' : 'arrow-down-circle',
+          statusText,
+          formattedTime
+        };
+      });
+      return convertedStoreTx;
     }
-    return SAMPLE_TRANSACTIONS;
+    return walletAddress ? [] : SAMPLE_TRANSACTIONS;
   }, [storeTransactions, walletAddress]);
 
   const filteredTxList = useMemo(() => {
@@ -297,15 +324,9 @@ export default function TransactionsScreen() {
                     {/* Details */}
                     <View style={styles.txDetails}>
                       <Text style={styles.txName}>{item.name}</Text>
-                      <View style={styles.txStatusRow}>
-                        <Text style={styles.txType}>{item.type}</Text>
-                        <Ionicons
-                          name={item.type === 'Received' ? 'checkmark-circle' : 'time-outline'}
-                          size={14}
-                          color="#667085"
-                          style={{ marginLeft: 4 }}
-                        />
-                      </View>
+                      <Text style={styles.txType}>
+                        {item.statusText ? `${item.statusText} • ${item.formattedTime}` : item.type}
+                      </Text>
                     </View>
 
                     {/* Amount */}

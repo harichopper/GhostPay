@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
   Image,
@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
+import QRCode from 'react-native-qrcode-svg';
 import TransactionDetailModal from '../../src/components/TransactionDetailModal';
 import { MnemonicBackupModal } from '../../src/components/MnemonicBackupModal';
 import { useWalletStore } from '../../src/store/walletStore';
@@ -96,12 +97,23 @@ export default function HomeScreen() {
     refreshBalance,
     displayCurrency,
     algoRates,
-    userName
+    userName,
+    verifiedPhone,
+    notificationsClearedAt
   } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
 
   const isOnline = isConnected && !demoMode?.simulateOffline;
+
+  const hasUnreadNotif = useMemo(() => {
+    if (!transactions || transactions.length === 0) return false;
+    const clearedTime = notificationsClearedAt ? new Date(notificationsClearedAt).getTime() : 0;
+    return transactions.some((t) => {
+      const txTime = t.timestamp ? new Date(t.timestamp).getTime() : Date.now();
+      return t.status === 'pending' || txTime > clearedTime;
+    });
+  }, [transactions, notificationsClearedAt]);
 
   // Onboarding local state if wallet is not connected
   const [loading, setLoading] = useState(false);
@@ -200,16 +212,8 @@ export default function HomeScreen() {
   const [selectedTx, setSelectedTx] = useState<GhostTransaction | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleOpenTxDetail = (name: string, amountNum: number, isPositive: boolean) => {
-    setSelectedTx({
-      id: 'tx-' + Date.now(),
-      sender: isPositive ? 'EVA2874...99A1' : (walletAddress || 'GBRNCKUL...CCB2'),
-      receiver: isPositive ? (walletAddress || 'GBRNCKUL...CCB2') : 'GBRNCKUL...CCB2',
-      amount: amountNum,
-      timestamp: 'Tuesday, Feb 3, 2026 • 11:32 PM',
-      status: 'confirmed',
-      txHash: '6e268a9b1c0d4fe2'
-    });
+  const handleOpenTxDetail = (tx: GhostTransaction) => {
+    setSelectedTx(tx);
     setIsModalOpen(true);
   };
 
@@ -246,17 +250,17 @@ export default function HomeScreen() {
 
   const handleCopyAddress = async () => {
     if (walletAddress) {
-      await Clipboard.getStringAsync();
+      await Clipboard.setStringAsync(walletAddress);
       Toast.show({
         type: 'success',
-        text1: 'Address Copied',
-        text2: 'Wallet address saved to clipboard'
+        text1: 'Wallet ID Copied',
+        text2: `${walletAddress.substring(0, 8)}...${walletAddress.substring(walletAddress.length - 4)} copied to clipboard`
       });
     } else {
       Toast.show({
         type: 'info',
-        text1: 'Address Copied',
-        text2: 'GhostPay Testnet Address Copied'
+        text1: 'No Wallet Connected',
+        text2: 'Create or import a wallet to copy your Wallet ID'
       });
     }
   };
@@ -322,7 +326,7 @@ export default function HomeScreen() {
                   onPress={() => router.push('/notification')}
                 >
                   <Ionicons name="notifications-outline" size={20} color={colors.primaryDark} />
-                  <View style={styles.notifBadge} />
+                  {hasUnreadNotif && <View style={styles.notifBadge} />}
                 </Pressable>
               </View>
             </>
@@ -503,9 +507,11 @@ export default function HomeScreen() {
                 {/* Vertical Divider Line */}
                 <View style={styles.idPillDivider} />
 
-                {/* Right side: GHOST ID: ghostpay@algo + Copy */}
+                {/* Right side: Wallet ID / Phone + Copy */}
                 <Pressable style={styles.idPillRight} onPress={handleCopyAddress}>
-                  <Text style={styles.idPillRightText}>GHOST ID: ghostpay@algo</Text>
+                  <Text style={styles.idPillRightText} numberOfLines={1} ellipsizeMode="middle">
+                    {walletAddress ? `Wallet ID: ${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}` : 'Wallet ID: Not Connected'}
+                  </Text>
                   <Ionicons name="copy-outline" size={15} color={colors.primaryDark} style={{ marginLeft: 6 }} />
                 </Pressable>
               </View>
@@ -518,43 +524,54 @@ export default function HomeScreen() {
                 </Pressable>
               </View>
 
-              {/* Recent Transactions List Preview */}
+              {/* Dynamic Recent Transactions Preview */}
               <View>
-                {/* Tx 1 */}
-                <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Eva Novak', 450.0, true)}>
-                  <View style={[styles.avatarContainer, { backgroundColor: '#172B3E' }]}>
-                    <Text style={styles.avatarText}>EN</Text>
+                {!transactions || transactions.length === 0 ? (
+                  <View style={styles.emptyRecentCard}>
+                    <Ionicons name="receipt-outline" size={32} color="#98A2B3" style={{ marginBottom: 6 }} />
+                    <Text style={styles.emptyRecentTitle}>No Recent Activity</Text>
+                    <Text style={styles.emptyRecentSub}>Your payments and transfer transactions will appear here.</Text>
                   </View>
-                  <View style={styles.txDetails}>
-                    <Text style={styles.txName}>Eva Novak</Text>
-                    <Text style={styles.txType}>Received • Today, 2:45 PM</Text>
-                  </View>
-                  <Text style={[styles.txAmount, styles.amountPositive]}>+$450.00</Text>
-                </Pressable>
+                ) : (
+                  transactions.slice(0, 4).map((tx) => {
+                    const isPaid = tx.sender?.toLowerCase() === (walletAddress || '').toLowerCase();
+                    const target = isPaid ? (tx.receiver || 'Recipient') : (tx.sender || 'Sender');
+                    const isPhone = target.replace(/\D/g, '').length >= 8 && target.length < 50;
+                    const displayName = isPhone
+                      ? target
+                      : `${target.substring(0, 6)}...${target.substring(target.length - 4)}`;
 
-                {/* Tx 2 */}
-                <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Binance Exchange', -820.0, false)}>
-                  <View style={[styles.avatarContainer, { backgroundColor: '#F0B90B' }]}>
-                    <Ionicons name="logo-bitcoin" size={20} color={colors.white} />
-                  </View>
-                  <View style={styles.txDetails}>
-                    <Text style={styles.txName}>Binance Exchange</Text>
-                    <Text style={styles.txType}>Sent • Yesterday, 6:12 PM</Text>
-                  </View>
-                  <Text style={[styles.txAmount, styles.amountNegative]}>-$820.00</Text>
-                </Pressable>
+                    const txDate = tx.timestamp ? new Date(tx.timestamp) : new Date();
+                    const formattedTime = isNaN(txDate.getTime())
+                      ? 'Recently'
+                      : txDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
-                {/* Tx 3 */}
-                <Pressable style={styles.txCard} onPress={() => handleOpenTxDetail('Multiplex Cinema', -124.55, false)}>
-                  <View style={[styles.avatarContainer, { backgroundColor: '#E50914' }]}>
-                    <Ionicons name="film" size={20} color={colors.white} />
-                  </View>
-                  <View style={styles.txDetails}>
-                    <Text style={styles.txName}>Multiplex Cinema</Text>
-                    <Text style={styles.txType}>Paid • 15 Aug, 9:30 PM</Text>
-                  </View>
-                  <Text style={[styles.txAmount, styles.amountNegative]}>-$124.55</Text>
-                </Pressable>
+                    return (
+                      <Pressable
+                        key={tx.id}
+                        style={styles.txCard}
+                        onPress={() => handleOpenTxDetail(tx)}
+                      >
+                        <View style={[styles.avatarContainer, { backgroundColor: isPaid ? '#172B3E' : '#05DA93' }]}>
+                          <Ionicons
+                            name={isPaid ? 'arrow-up-circle' : 'arrow-down-circle'}
+                            size={22}
+                            color={colors.white}
+                          />
+                        </View>
+                        <View style={styles.txDetails}>
+                          <Text style={styles.txName}>{isPaid ? `To ${displayName}` : `From ${displayName}`}</Text>
+                          <Text style={styles.txType}>
+                            {tx.status === 'confirmed' ? 'Confirmed' : 'Pending Sync'} • {formattedTime}
+                          </Text>
+                        </View>
+                        <Text style={[styles.txAmount, isPaid ? styles.amountNegative : styles.amountPositive]}>
+                          {isPaid ? '-' : '+'}{tx.amount.toFixed(2)} ALGO
+                        </Text>
+                      </Pressable>
+                    );
+                  })
+                )}
               </View>
             </>
           ) : (
@@ -709,15 +726,33 @@ export default function HomeScreen() {
               <Ionicons name="close" size={20} color={colors.primaryDark} />
             </Pressable>
 
-            <Text style={styles.modalTitle}>My QR Code</Text>
-            <Text style={styles.modalSub}>Scan QR code to transfer funds to this wallet</Text>
+            <Text style={styles.modalTitle}>My Payment QR Code</Text>
+            <Text style={styles.modalSub}>Scan QR code with GhostPay camera to send funds directly</Text>
 
-            {/* Dummy QR Code Box */}
+            {/* Real SVG QR Code */}
             <View style={styles.qrBox}>
-              <Ionicons name="qr-code" size={150} color={colors.primaryDark} />
+              <QRCode
+                value={
+                  walletAddress
+                    ? `ghostpay://pay?address=${walletAddress}&phone=${encodeURIComponent(verifiedPhone || '')}`
+                    : 'ghostpay://pay?demo=true'
+                }
+                size={160}
+                color={colors.primaryDark}
+                backgroundColor="#FFFFFF"
+              />
             </View>
 
-            <Text style={styles.qrAddressText}>GHOST ID: ghostpay@algo</Text>
+            <View style={{ alignItems: 'center', marginBottom: 16, paddingHorizontal: 12 }}>
+              {Boolean(verifiedPhone) && (
+                <Text style={styles.qrAddressText}>Phone: {verifiedPhone}</Text>
+              )}
+              {Boolean(walletAddress) && (
+                <Text style={[styles.qrAddressText, { fontSize: 11, color: '#667085', marginTop: 2 }]} numberOfLines={1} ellipsizeMode="middle">
+                  Address: {walletAddress}
+                </Text>
+              )}
+            </View>
 
             <Pressable style={styles.copyAddressButton} onPress={handleCopyAddress}>
               <Ionicons name="copy-outline" size={18} color={colors.primaryDark} style={{ marginRight: 6 }} />
@@ -1389,6 +1424,28 @@ const styles = StyleSheet.create({
   },
   amountNegative: {
     color: '#D92D20'
+  },
+  emptyRecentCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(23, 43, 62, 0.08)',
+    marginVertical: 6
+  },
+  emptyRecentTitle: {
+    fontSize: 15,
+    fontFamily: 'Inter_600SemiBold',
+    color: colors.primaryDark,
+    marginBottom: 4
+  },
+  emptyRecentSub: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: '#667085',
+    textAlign: 'center'
   },
   modalOverlay: {
     flex: 1,

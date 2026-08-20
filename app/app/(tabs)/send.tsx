@@ -3,8 +3,9 @@ import * as Clipboard from 'expo-clipboard';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Platform,
@@ -31,19 +32,84 @@ import Toast from 'react-native-toast-message';
 import { WalletOnboardingCard } from '../../src/components/WalletOnboardingCard';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
+import { lookupWalletsByMobile, lookupIdentityByWallet } from '../../src/services/api';
+import type { GhostTransaction } from '../../src/types/transaction';
 
-const RECENT_CONTACTS = [
-  { id: '1', name: 'Eva Novak', phone: '+1 415 555 2872', bg: '#4A3E3D', initial: 'EN' },
-  { id: '2', name: 'Henrik Jansen', phone: '+1 212 555 4910', bg: '#3B4B5B', initial: 'HJ' },
-  { id: '3', name: 'Matteo Ricci', phone: '+1 312 555 8832', bg: '#2C3E50', initial: 'MR' },
-  { id: '4', name: 'Emilia Costa', phone: '+1 650 555 1049', bg: '#6C5CE7', initial: 'EC' }
-];
+export function parsePaymentQr(qrData: string) {
+  let address = '';
+  let phone = '';
+  let amount = '';
+  let note = '';
+
+  const cleanData = qrData.trim();
+
+  if (cleanData.startsWith('algorand://')) {
+    const raw = cleanData.replace('algorand://', '');
+    const [addrPart, queryPart] = raw.split('?');
+    address = addrPart || '';
+    if (queryPart) {
+      const params = new URLSearchParams(queryPart);
+      if (params.has('amount')) amount = params.get('amount') || '';
+      if (params.has('note')) note = params.get('note') || '';
+    }
+  } else if (cleanData.startsWith('ghostpay://')) {
+    const queryPart = cleanData.includes('?') ? cleanData.split('?')[1] : '';
+    const params = new URLSearchParams(queryPart);
+    if (params.has('address')) address = params.get('address') || '';
+    if (params.has('phone')) phone = params.get('phone') || '';
+    if (params.has('amount')) amount = params.get('amount') || '';
+  } else if (/^[A-Z2-7]{58}$/i.test(cleanData)) {
+    address = cleanData;
+  } else if (cleanData.replace(/\D/g, '').length >= 8) {
+    phone = cleanData;
+  } else {
+    address = cleanData;
+  }
+
+  return { address, phone, amount, note };
+}
+
+const AVATAR_COLORS = ['#4A3E3D', '#3B4B5B', '#2C3E50', '#6C5CE7', '#027A48', '#B54708', '#7F56D9'];
+
+function getDynamicRecentContacts(transactions: GhostTransaction[], currentWallet: string) {
+  const map = new Map<string, { id: string; name: string; phone: string; bg: string; initial: string }>();
+
+  // Extract targets strictly from user's real transactions
+  if (transactions && transactions.length > 0) {
+    transactions.forEach((tx, idx) => {
+      const rawTarget = tx.receiver?.trim();
+      if (!rawTarget || map.has(rawTarget)) return;
+
+      const isPhone = rawTarget.replace(/\D/g, '').length >= 8 && rawTarget.length < 50;
+      const displayName = isPhone
+        ? rawTarget
+        : `${rawTarget.substring(0, 4)}...${rawTarget.substring(rawTarget.length - 4)}`;
+
+      const initial = isPhone ? '📱' : rawTarget.substring(0, 2).toUpperCase();
+
+      map.set(rawTarget, {
+        id: `dynamic-${idx}-${rawTarget}`,
+        name: displayName,
+        phone: rawTarget,
+        bg: AVATAR_COLORS[map.size % AVATAR_COLORS.length],
+        initial
+      });
+    });
+  }
+
+  return Array.from(map.values());
+}
 
 export default function SendScreen() {
   const router = useRouter();
-  const { walletAddress, balanceAlgo, enqueueOfflinePayment, isConnected } = useWalletStore();
+  const { walletAddress, balanceAlgo, enqueueOfflinePayment, isConnected, transactions } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
+
+  const dynamicRecentContacts = useMemo(
+    () => getDynamicRecentContacts(transactions, walletAddress),
+    [transactions, walletAddress]
+  );
 
   const [activeTab, setActiveTab] = useState<'scan' | 'send'>('scan');
   const [permission, requestPermission] = useCameraPermissions();
@@ -53,6 +119,69 @@ export default function SendScreen() {
   const [isFlashOn, setIsFlashOn] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [scanKey, setScanKey] = useState(0);
+
+  // Recipient resolution state
+  const [recipientIdentity, setRecipientIdentity] = useState<{
+    name?: string;
+    verified: boolean;
+    primaryAddress?: string;
+  } | null>(null);
+  const [isResolvingRecipient, setIsResolvingRecipient] = useState(false);
+
+  const resolveRecipientIdentity = async (input: string) => {
+    const cleanInput = input.trim();
+    if (!cleanInput) {
+      setRecipientIdentity(null);
+      return;
+    }
+
+    const isPhone = cleanInput.replace(/\D/g, '').length >= 8 && !cleanInput.startsWith('0x') && cleanInput.length < 50;
+    if (isPhone) {
+      setIsResolvingRecipient(true);
+      try {
+        const res = await lookupWalletsByMobile(cleanInput);
+        if (res && res.verified && res.wallets.length > 0) {
+          const primary = res.wallets.find((w) => w.isDefault) || res.wallets[0];
+          setRecipientIdentity({
+            name: res.name || 'Verified Vault Member',
+            verified: true,
+            primaryAddress: primary.address
+          });
+        } else {
+          setRecipientIdentity({
+            verified: false
+          });
+        }
+      } catch (err) {
+        setRecipientIdentity(null);
+      } finally {
+        setIsResolvingRecipient(false);
+      }
+    } else if (cleanInput.length >= 50) {
+      setIsResolvingRecipient(true);
+      try {
+        const res = await lookupIdentityByWallet(cleanInput);
+        if (res && res.identity && res.identity.verified) {
+          setRecipientIdentity({
+            name: res.identity.name || 'Verified Vault Member',
+            verified: true,
+            primaryAddress: cleanInput
+          });
+        } else {
+          setRecipientIdentity({
+            verified: true,
+            primaryAddress: cleanInput
+          });
+        }
+      } catch (err) {
+        setRecipientIdentity(null);
+      } finally {
+        setIsResolvingRecipient(false);
+      }
+    } else {
+      setRecipientIdentity(null);
+    }
+  };
 
   // Trigger entrance animations every time screen is focused (tab navigation)
   useFocusEffect(
@@ -130,15 +259,21 @@ export default function SendScreen() {
     }
   };
 
-  const handleBarCodeScanned = ({ data }: { data: string }) => {
+  const handleBarCodeScanned = async ({ data }: { data: string }) => {
     if (data) {
-      setRecipient(data);
+      const parsed = parsePaymentQr(data);
+      const targetRecipient = parsed.address || parsed.phone || data;
+      setRecipient(targetRecipient);
+      if (parsed.amount) {
+        setAmount(parsed.amount);
+      }
       setActiveTab('send');
       Toast.show({
         type: 'success',
         text1: 'QR Code Scanned',
-        text2: `Recipient set to ${data.slice(0, 12)}...`
+        text2: `Target: ${targetRecipient.slice(0, 16)}...`
       });
+      await resolveRecipientIdentity(targetRecipient);
     }
   };
 
@@ -321,35 +456,75 @@ export default function SendScreen() {
                     placeholder="Enter phone number or 58-char address..."
                     placeholderTextColor="rgba(23, 43, 62, 0.4)"
                     value={recipient}
-                    onChangeText={setRecipient}
+                    onChangeText={(text) => {
+                      setRecipient(text);
+                      void resolveRecipientIdentity(text);
+                    }}
                   />
                   {recipient.length > 0 && (
-                    <Pressable onPress={() => setRecipient('')}>
+                    <Pressable onPress={() => { setRecipient(''); setRecipientIdentity(null); }}>
                       <Ionicons name="close-circle" size={18} color="rgba(23, 43, 62, 0.4)" />
                     </Pressable>
                   )}
                 </View>
+
+                {/* Live Recipient Resolution Badge */}
+                {isResolvingRecipient ? (
+                  <View style={styles.resolvingContainer}>
+                    <ActivityIndicator size="small" color="#05DA93" style={{ marginRight: 8 }} />
+                    <Text style={styles.resolvingText}>Resolving GhostPay identity...</Text>
+                  </View>
+                ) : recipientIdentity ? (
+                  <View style={[styles.recipientBadgeCard, recipientIdentity.verified ? styles.badgeVerified : styles.badgeUnverified]}>
+                    <Ionicons
+                      name={recipientIdentity.verified ? 'shield-checkmark' : 'time-outline'}
+                      size={18}
+                      color={recipientIdentity.verified ? '#027A48' : '#B54708'}
+                      style={{ marginRight: 8 }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.badgeTitle, { color: recipientIdentity.verified ? '#027A48' : '#B54708' }]}>
+                        {recipientIdentity.name ? recipientIdentity.name : (recipientIdentity.verified ? 'Verified Vault Member' : 'Unlinked Mobile Number')}
+                      </Text>
+                      {Boolean(recipientIdentity.primaryAddress) && (
+                        <Text style={styles.badgeSub} numberOfLines={1} ellipsizeMode="middle">
+                          Address: {recipientIdentity.primaryAddress}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                ) : null}
               </View>
 
               {/* Quick Contacts */}
               <View style={styles.quickContactsSection}>
-                <Text style={styles.sectionMiniHeader}>RECENT CONTACTS</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.contactsScroll}>
-                  {RECENT_CONTACTS.map((contact) => (
-                    <Pressable
-                      key={contact.id}
-                      style={styles.contactItem}
-                      onPress={() => setRecipient(contact.phone)}
-                    >
-                      <View style={[styles.contactAvatar, { backgroundColor: contact.bg }]}>
-                        <Text style={styles.contactInitial}>{contact.initial}</Text>
-                      </View>
-                      <Text style={styles.contactName} numberOfLines={1}>
-                        {contact.name.split(' ')[0]}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
+                <Text style={styles.sectionMiniHeader}>RECENT ACCOUNTS & CONTACTS</Text>
+                {dynamicRecentContacts.length === 0 ? (
+                  <View style={styles.emptyContactsPill}>
+                    <Ionicons name="people-outline" size={20} color="#98A2B3" style={{ marginRight: 6 }} />
+                    <Text style={styles.emptyContactsText}>No recent accounts</Text>
+                  </View>
+                ) : (
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.contactsScroll}>
+                    {dynamicRecentContacts.map((contact: { id: string; name: string; phone: string; bg: string; initial: string }) => (
+                      <Pressable
+                        key={contact.id}
+                        style={styles.contactItem}
+                        onPress={() => {
+                          setRecipient(contact.phone);
+                          void resolveRecipientIdentity(contact.phone);
+                        }}
+                      >
+                        <View style={[styles.contactAvatar, { backgroundColor: contact.bg }]}>
+                          <Text style={styles.contactInitial}>{contact.initial}</Text>
+                        </View>
+                        <Text style={styles.contactName} numberOfLines={1}>
+                          {contact.name.split(' ')[0]}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                )}
               </View>
 
               {/* Amount Entry Display */}
@@ -367,7 +542,9 @@ export default function SendScreen() {
                 </View>
 
                 <View style={styles.amountDisplayCard}>
-                  <Text style={styles.currencyPrefix}>{currencyMode === 'USD' ? '$' : '🄐'}</Text>
+                  <Text style={[styles.currencyPrefix, currencyMode === 'ALGO' && { fontSize: 22 }]}>
+                    {currencyMode === 'USD' ? '$' : 'ALGO'}
+                  </Text>
                   <TextInput
                     style={styles.amountInput}
                     placeholder="0.00"
@@ -769,8 +946,8 @@ const styles = StyleSheet.create({
     color: '#5C768D',
     fontSize: 11,
     fontFamily: 'Inter_700Bold',
-    letterSpacing: 0.5,
-    marginBottom: 10
+    letterSpacing: 0.2,
+    marginBottom: 15
   },
   contactsScroll: {
     flexDirection: 'row'
@@ -795,9 +972,62 @@ const styles = StyleSheet.create({
   },
   contactName: {
     color: colors.primaryDark,
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'Inter_600SemiBold',
     textAlign: 'center'
+  },
+  emptyContactsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(23, 43, 62, 0.08)'
+  },
+  emptyContactsText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: '#98A2B3'
+  },
+  resolvingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginLeft: 4
+  },
+  resolvingText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: '#667085'
+  },
+  recipientBadgeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    padding: 10,
+    marginTop: 10,
+    borderWidth: 1
+  },
+  badgeVerified: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0'
+  },
+  badgeUnverified: {
+    backgroundColor: '#FFFAEB',
+    borderColor: '#FEDF89'
+  },
+  badgeTitle: {
+    fontSize: 13,
+    fontFamily: 'Inter_700Bold'
+  },
+  badgeSub: {
+    fontSize: 11,
+    fontFamily: 'Inter_400Regular',
+    color: '#475467',
+    marginTop: 2
   },
   amountSection: {
     marginBottom: 28
