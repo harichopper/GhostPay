@@ -15,7 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, AppStateStatus, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
+SplashScreen.preventAutoHideAsync().catch(() => { });
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast, { ToastConfigParams } from 'react-native-toast-message';
 import { LockScreen } from '../src/components/security/LockScreen';
@@ -102,7 +102,7 @@ export default function RootLayout() {
 
     const loaderTimer = setTimeout(() => {
       setIsAppLoading(false);
-      void SplashScreen.hideAsync().catch(() => {});
+      void SplashScreen.hideAsync().catch(() => { });
     }, 600);
 
     return () => clearTimeout(loaderTimer);
@@ -283,7 +283,7 @@ export default function RootLayout() {
           style={splashStyles.fullScreenOverlay}
           onPress={() => {
             setIsAppLoading(false);
-            void SplashScreen.hideAsync().catch(() => {});
+            void SplashScreen.hideAsync().catch(() => { });
           }}
         >
           <StatusBar style="light" />

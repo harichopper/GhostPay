@@ -696,6 +696,7 @@ const styles = StyleSheet.create({
     marginVertical: 8
   },
   actionFormCard: {
+    width: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     padding: 20,

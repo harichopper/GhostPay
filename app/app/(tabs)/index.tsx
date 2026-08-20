@@ -318,7 +318,7 @@ export default function HomeScreen() {
             </>
           ) : (
             <>
-            
+
             </>
           )}
         </View>
@@ -556,22 +556,22 @@ export default function HomeScreen() {
                   style={styles.onboardingBrandLogo}
                   resizeMode="contain"
                 />
-                <Text style={styles.onboardingBrandText}>GHOSTPAY</Text>
+                <Text style={styles.onboardingBrandText}>
+                  <Text style={{ color: colors.primaryDark }}>GHOST</Text>
+                  <Text style={{ color: colors.secondary }}>PAY</Text>
+                </Text>
               </View>
 
               {onboardingMode === 'welcome' ? (
                 <>
                   <View style={styles.actionFormCard}>
-                    {/* Header Row: Checkmark Badge + Title */}
-                    <View style={styles.formTitleRow}>
-                      <View style={styles.topLeftBadgeIcon}>
-                        <Ionicons name="checkmark-sharp" size={16} color="#0E9F6E" />
-                      </View>
-                      <Text style={styles.formTitleInline}>Initialize GhostPay Account</Text>
+                    {/* Centered Modern Header Layout */}
+                    <View style={styles.centeredHeaderWrapper}>
+
+                      <Text style={styles.centeredFormSubtitle}>
+                        Create a new Algorand address or link your existing wallet to authorize zero-data vault payments securely.
+                      </Text>
                     </View>
-                    <Text style={styles.formSubtitle}>
-                      Create a new Algorand address or link your existing wallet to authorize zero-data vault payments securely.
-                    </Text>
 
                     {/* 3-Column Feature Highlights Box */}
                     <View style={styles.featureHighlightsBox}>
@@ -634,49 +634,49 @@ export default function HomeScreen() {
                   </View>
                 </>
               ) : (
-              <View style={styles.actionFormCard}>
-                <View style={styles.backRow}>
-                  <Pressable onPress={() => setOnboardingMode('welcome')} style={styles.backButton}>
-                    <Ionicons name="arrow-back" size={16} color="#667085" style={{ marginRight: 4 }} />
-                    <Text style={styles.backText}>Go Back</Text>
-                  </Pressable>
+                <View style={styles.actionFormCard}>
+                  <View style={styles.backRow}>
+                    <Pressable onPress={() => setOnboardingMode('welcome')} style={styles.backButton}>
+                      <Ionicons name="arrow-back" size={16} color="#667085" style={{ marginRight: 4 }} />
+                      <Text style={styles.backText}>Go Back</Text>
+                    </Pressable>
+                  </View>
+
+                  <Text style={styles.formTitle}>Import Existing Keys</Text>
+                  <Text style={styles.formSubtitle}>
+                    Enter your 25-word Algorand recovery seed phrase.
+                  </Text>
+
+                  <TextInput
+                    style={styles.textArea}
+                    placeholder="word1 word2 word3..."
+                    placeholderTextColor="#98A2B3"
+                    multiline
+                    numberOfLines={4}
+                    value={importMnemonic}
+                    onChangeText={setImportMnemonic}
+                    autoCapitalize="none"
+                  />
+
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Wallet Label (e.g. Primary Account)"
+                    placeholderTextColor="#98A2B3"
+                    value={walletLabel}
+                    onChangeText={setWalletLabel}
+                  />
+
+                  {loading ? (
+                    <ActivityIndicator size="large" color="#05DA93" style={styles.loader} />
+                  ) : (
+                    <Pressable style={styles.primaryButton} onPress={handleImportWallet}>
+                      <Text style={styles.primaryButtonText}>Import Wallet</Text>
+                    </Pressable>
+                  )}
                 </View>
-
-                <Text style={styles.formTitle}>Import Existing Keys</Text>
-                <Text style={styles.formSubtitle}>
-                  Enter your 25-word Algorand recovery seed phrase.
-                </Text>
-
-                <TextInput
-                  style={styles.textArea}
-                  placeholder="word1 word2 word3..."
-                  placeholderTextColor="#98A2B3"
-                  multiline
-                  numberOfLines={4}
-                  value={importMnemonic}
-                  onChangeText={setImportMnemonic}
-                  autoCapitalize="none"
-                />
-
-                <TextInput
-                  style={styles.input}
-                  placeholder="Wallet Label (e.g. Primary Account)"
-                  placeholderTextColor="#98A2B3"
-                  value={walletLabel}
-                  onChangeText={setWalletLabel}
-                />
-
-                {loading ? (
-                  <ActivityIndicator size="large" color="#05DA93" style={styles.loader} />
-                ) : (
-                  <Pressable style={styles.primaryButton} onPress={handleImportWallet}>
-                    <Text style={styles.primaryButtonText}>Import Wallet</Text>
-                  </Pressable>
-                )}
-              </View>
-            )}
-          </View>
-        )}
+              )}
+            </View>
+          )}
         </ScrollView>
       </LinearGradient>
 
@@ -862,7 +862,6 @@ const styles = StyleSheet.create({
   onboardingLogoWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
     marginBottom: 20
   },
   onboardingBrandLogo: {
@@ -871,30 +870,48 @@ const styles = StyleSheet.create({
   },
   onboardingBrandText: {
     color: colors.primaryDark,
-    fontSize: 22,
+    fontSize: 24,
     fontFamily: 'Orbitron_700Bold',
-    letterSpacing: 1.5,
+    letterSpacing: 2,
     marginTop: 8
   },
-  formTitleRow: {
+  centeredHeaderWrapper: {
+    alignItems: 'center',
+    marginBottom: 4,
+    paddingHorizontal: 8
+  },
+  headerPillBadge: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 20,
+    marginBottom: 10
+  },
+  headerPillText: {
+    fontSize: 11,
+    fontFamily: 'Inter_700Bold',
+    color: '#047857',
+    letterSpacing: 0.8
+  },
+  centeredFormTitle: {
+    fontSize: 22,
+    fontFamily: 'Inter_700Bold',
+    color: '#0F172A',
+    textAlign: 'center',
+    letterSpacing: -0.4,
     marginBottom: 8
   },
-  formTitleInline: {
-    fontSize: 20,
-    fontFamily: 'Inter_700Bold',
-    color: '#101828',
-    flex: 1
-  },
-  topLeftBadgeIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#D1FADF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10
+  centeredFormSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#000000ff',
+    textAlign: 'center',
+    lineHeight: 20,
+    maxWidth: '96%'
   },
   featureHighlightsBox: {
     flexDirection: 'row',
@@ -952,7 +969,8 @@ const styles = StyleSheet.create({
   primaryThemeButtonText: {
     color: colors.primaryDark,
     fontSize: 15,
-    fontFamily: 'Inter_700Bold'
+    fontFamily: 'Inter_700Bold',
+    textAlign: 'center'
   },
   secondaryThemeButton: {
     width: '100%',
@@ -970,7 +988,8 @@ const styles = StyleSheet.create({
   secondaryThemeButtonText: {
     color: colors.primaryDark,
     fontSize: 15,
-    fontFamily: 'Inter_700Bold'
+    fontFamily: 'Inter_700Bold',
+    textAlign: 'center'
   },
   aiProtectionCard: {
     flexDirection: 'row',
@@ -1475,6 +1494,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2
   },
   actionFormCard: {
+    width: '100%',
     backgroundColor: '#FFFFFF',
     borderRadius: 24,
     paddingHorizontal: 16,
@@ -1514,7 +1534,8 @@ const styles = StyleSheet.create({
     color: '#0D1E2F',
     fontSize: 14,
     fontFamily: 'Orbitron_700Bold',
-    letterSpacing: 0.5
+    letterSpacing: 0.5,
+    textAlign: 'center'
   },
   secondaryButton: {
     backgroundColor: 'transparent',
@@ -1530,7 +1551,8 @@ const styles = StyleSheet.create({
     color: colors.primaryDark,
     fontSize: 14,
     fontFamily: 'Orbitron_700Bold',
-    letterSpacing: 0.5
+    letterSpacing: 0.5,
+    textAlign: 'center'
   },
   buttonIcon: {
     marginRight: 8
