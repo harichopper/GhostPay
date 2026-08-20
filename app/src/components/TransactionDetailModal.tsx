@@ -35,6 +35,14 @@ export default function TransactionDetailModal({
     ? `[${transaction.txHash.slice(0, 6)}....${transaction.txHash.slice(-4)}]`
     : '[6e26....4fc2]';
 
+  const txDate = transaction.timestamp ? new Date(transaction.timestamp) : new Date();
+  const dateFormatted = isNaN(txDate.getTime())
+    ? 'Recently'
+    : txDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+  const timeFormatted = isNaN(txDate.getTime())
+    ? ''
+    : txDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+
   const handleCopy = (text: string, label: string) => {
     void Clipboard.setStringAsync(text);
     Toast.show({
@@ -43,6 +51,12 @@ export default function TransactionDetailModal({
       text2: `${label} copied successfully`
     });
   };
+
+  const isConfirmed = transaction.status === 'confirmed';
+  const isFailed = transaction.status === 'failed';
+  const statusIconName = isConfirmed ? 'checkmark' : isFailed ? 'close' : 'time-outline';
+  const statusBgColor = isConfirmed ? '#12B76A' : isFailed ? '#F04438' : '#F79E1B';
+  const statusHaloColor = isConfirmed ? 'rgba(18, 183, 106, 0.15)' : isFailed ? 'rgba(240, 68, 56, 0.15)' : 'rgba(247, 158, 27, 0.15)';
 
   return (
     <Modal
@@ -67,16 +81,16 @@ export default function TransactionDetailModal({
 
           {/* Top Icon Circle */}
           <View style={styles.iconCircleWrapper}>
-            <View style={styles.iconCircleOuter}>
-              <View style={styles.iconCircleInner}>
-                <Ionicons name="checkmark" size={32} color="#FFFFFF" />
+            <View style={[styles.iconCircleOuter, { backgroundColor: statusHaloColor }]}>
+              <View style={[styles.iconCircleInner, { backgroundColor: statusBgColor }]}>
+                <Ionicons name={statusIconName} size={32} color="#FFFFFF" />
               </View>
             </View>
           </View>
 
           {/* Header Title & Amount */}
           <Text style={styles.titleText}>
-            {transaction.status === 'confirmed' ? 'Payment Successful' : 'Payment Processing'}
+            {isConfirmed ? 'Payment Successful' : isFailed ? 'Payment Failed' : 'Payment Processing'}
           </Text>
           <Text style={styles.amountText}>{formattedAmount}</Text>
 
@@ -86,8 +100,8 @@ export default function TransactionDetailModal({
             <View style={styles.detailRow}>
               <Text style={styles.rowLabel}>Date & Time:</Text>
               <View style={styles.dateTimeGroup}>
-                <Text style={styles.rowValue}>Tuesday, Feb 3, 2026</Text>
-                <Text style={styles.rowSubValue}>11:32 PM</Text>
+                <Text style={styles.rowValue}>{dateFormatted}</Text>
+                {Boolean(timeFormatted) && <Text style={styles.rowSubValue}>{timeFormatted}</Text>}
               </View>
             </View>
 

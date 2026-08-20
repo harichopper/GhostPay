@@ -1,3 +1,5 @@
+import '../index.js';
+import 'react-native-get-random-values';
 import { Ionicons } from '@expo/vector-icons';
 import {
   Inter_400Regular,
@@ -9,16 +11,24 @@ import { Orbitron_700Bold } from '@expo-google-fonts/orbitron';
 import { Rajdhani_500Medium, Rajdhani_600SemiBold, Rajdhani_700Bold } from '@expo-google-fonts/rajdhani';
 import NetInfo from '@react-native-community/netinfo';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
-import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { AppState, AppStateStatus, Image, LogBox, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
+LogBox.ignoreLogs([
+  "It looks like you're running in react-native",
+  "In order to perform common crypto operations you will need to polyfill"
+]);
+
+SplashScreen.preventAutoHideAsync().catch(() => { });
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import Toast, { ToastConfigParams } from 'react-native-toast-message';
+import { LockScreen } from '../src/components/security/LockScreen';
+import { useSecurityStore } from '../src/store/securityStore';
 import { useWalletStore } from '../src/store/walletStore';
+import { authenticateBiometric, getBiometricName, verifyPin } from '../src/utils/security';
 
 const toastConfig = {
   success: ({ text1, text2 }: ToastConfigParams<any>) => (
@@ -51,8 +61,14 @@ const toastConfig = {
 };
 
 export default function RootLayout() {
+  const router = useRouter();
   const [isClientMounted, setIsClientMounted] = useState(false);
   const [isAppLoading, setIsAppLoading] = useState(true);
+  const [isSecurityReady, setIsSecurityReady] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [securityError, setSecurityError] = useState<string | undefined>();
+  const [biometricName, setBiometricName] = useState('Biometric');
 
   const [fontsLoaded] = useFonts({
     Orbitron_700Bold,
@@ -65,10 +81,13 @@ export default function RootLayout() {
     Inter_700Bold
   });
 
+  const walletAddress = useWalletStore((state) => state.walletAddress);
   const setConnectionStatus = useWalletStore((state) => state.setConnectionStatus);
   const syncPendingTransactions = useWalletStore((state) => state.syncPendingTransactions);
   const hydrateSampleData = useWalletStore((state) => state.hydrateSampleData);
   const loadNetworkInfo = useWalletStore((state) => state.loadNetworkInfo);
+  const biometricEnabled = useSecurityStore((state) => state.biometricEnabled);
+  const unlock = useSecurityStore((state) => state.unlock);
 
   useEffect(() => {
     hydrateSampleData();
@@ -76,11 +95,11 @@ export default function RootLayout() {
 
     const loaderTimer = setTimeout(() => {
       setIsAppLoading(false);
-      void SplashScreen.hideAsync().catch(() => {});
-    }, 600);
+      void SplashScreen.hideAsync().catch(() => { });
+    }, 500);
 
     return () => clearTimeout(loaderTimer);
-  }, []);
+  }, [fontsLoaded]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -90,9 +109,146 @@ export default function RootLayout() {
     return () => clearInterval(timer);
   }, []);
 
+  // Global NetInfo Auto-Broadcaster listener
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const isOnline = Boolean(state.isConnected && state.isInternetReachable !== false);
+
+      if (isOnline) {
+        const store = useWalletStore.getState();
+        const pendingCount = (store.transactions || []).filter(
+          (tx) => tx.status === 'pending' || tx.status === 'syncing'
+        ).length;
+
+        if (pendingCount > 0 && !store.isSyncing) {
+          Toast.show({
+            type: 'info',
+            text1: 'Internet Connection Active',
+            text2: `Broadcasting ${pendingCount} pending offline transaction(s)...`
+          });
+          void store.syncPendingTransactions();
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   useEffect(() => {
     setIsClientMounted(true);
   }, []);
+
+
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeSecurity = async () => {
+      let securityState = useSecurityStore.getState();
+      let name = 'Biometric';
+
+      try {
+        await useSecurityStore.persist.rehydrate();
+        securityState = useSecurityStore.getState();
+        securityState.initialize();
+
+        try {
+          name = await getBiometricName();
+        } catch {
+          name = 'Biometric';
+        }
+      } catch {
+        securityState.initialize();
+      } finally {
+        if (!isMounted) {
+          return;
+        }
+
+        setBiometricName(name);
+        setIsLocked(securityState.appLockEnabled);
+        setIsSecurityReady(true);
+      }
+    };
+
+    void initializeSecurity();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let backgroundedAt: number | null = null;
+    let currentAppState: AppStateStatus = AppState.currentState;
+
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (currentAppState === 'active' && (nextAppState === 'inactive' || nextAppState === 'background')) {
+        backgroundedAt = Date.now();
+      }
+
+      if (nextAppState === 'active' && backgroundedAt !== null) {
+        const securityState = useSecurityStore.getState();
+        const elapsed = Date.now() - backgroundedAt;
+        backgroundedAt = null;
+
+        if (securityState.appLockEnabled && elapsed >= securityState.sessionTimeout) {
+          securityState.lock();
+          setSecurityError(undefined);
+          setIsLocked(true);
+        }
+      }
+
+      currentAppState = nextAppState;
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  const handlePinComplete = useCallback(async (pin: string): Promise<boolean> => {
+    setIsAuthenticating(true);
+    setSecurityError(undefined);
+
+    try {
+      const isPinValid = await verifyPin(pin);
+      if (!isPinValid) {
+        setSecurityError('Incorrect PIN. Try again.');
+        return false;
+      }
+
+      unlock();
+      setIsLocked(false);
+      return true;
+    } catch {
+      setSecurityError('Unable to verify your PIN. Try again.');
+      return false;
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }, [unlock]);
+
+  const handleBiometricUnlock = useCallback(async (isAutomatic = false): Promise<void> => {
+    setIsAuthenticating(true);
+    setSecurityError(undefined);
+
+    try {
+      const isAuthenticated = await authenticateBiometric();
+      if (!isAuthenticated) {
+        if (!isAutomatic) {
+          setSecurityError('Biometric authentication was not completed. Use your PIN.');
+        }
+        return;
+      }
+
+      unlock();
+      setIsLocked(false);
+    } catch {
+      if (!isAutomatic) {
+        setSecurityError('Biometric authentication is unavailable. Use your PIN.');
+      }
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }, [unlock]);
 
   useEffect(() => {
     const subscription = NetInfo.addEventListener((state) => {
@@ -116,7 +272,7 @@ export default function RootLayout() {
 
   if (!fontsLoaded) {
     return (
-      <View style={splashStyles.fullScreenOverlay}>
+      <Pressable style={splashStyles.fullScreenOverlay} onPress={() => void SplashScreen.hideAsync().catch(() => { })}>
         <StatusBar style="light" />
         <Image
           source={require('../assets/branding/ghostpay-logo.png')}
@@ -124,7 +280,7 @@ export default function RootLayout() {
           resizeMode="contain"
         />
         <Text style={splashStyles.connectingTextFallback}>Connecting...</Text>
-      </View>
+      </Pressable>
     );
   }
 
@@ -134,6 +290,7 @@ export default function RootLayout() {
         <Stack.Screen name='(tabs)' />
         <Stack.Screen name='analytics' />
         <Stack.Screen name='settings' />
+        <Stack.Screen name='profile' />
         <Stack.Screen name='+not-found' />
       </Stack>
       <StatusBar style='light' />
@@ -144,7 +301,7 @@ export default function RootLayout() {
           style={splashStyles.fullScreenOverlay}
           onPress={() => {
             setIsAppLoading(false);
-            void SplashScreen.hideAsync().catch(() => {});
+            void SplashScreen.hideAsync().catch(() => { });
           }}
         >
           <StatusBar style="light" />
@@ -156,6 +313,16 @@ export default function RootLayout() {
           <Text style={splashStyles.connectingText}>Connecting...</Text>
         </Pressable>
       )}
+      {isSecurityReady && isLocked && !isAppLoading ? (
+        <LockScreen
+          biometricEnabled={biometricEnabled}
+          biometricName={biometricName}
+          isAuthenticating={isAuthenticating}
+          errorMessage={securityError}
+          onPinComplete={handlePinComplete}
+          onBiometricPress={handleBiometricUnlock}
+        />
+      ) : null}
     </SafeAreaProvider>
   );
 }

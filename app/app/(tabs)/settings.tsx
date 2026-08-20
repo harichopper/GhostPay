@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import algosdk from 'algosdk';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useState } from 'react';
+import { useRouter } from 'expo-router';
+import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Platform,
@@ -13,124 +15,321 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   useWindowDimensions,
   View
 } from 'react-native';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
-import Toast from 'react-native-toast-message';
+import Toast, { ToastConfigParams } from 'react-native-toast-message';
+import PendingQueueModal from '../../src/components/PendingQueueModal';
+import { MnemonicBackupModal } from '../../src/components/MnemonicBackupModal';
+import { loadWalletSecretKey } from '../../src/storage/walletSecretStorage';
+import { useSecurityStore } from '../../src/store/securityStore';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
+import {
+  authenticateBiometric,
+  canUseBiometrics,
+  removePin,
+  savePin,
+  verifyPin
+} from '../../src/utils/security';
+
+type SecurityPinStep =
+  | 'create'
+  | 'confirmCreate'
+  | 'disableLock'
+  | 'verifyCurrentForChange'
+  | 'createChange'
+  | 'confirmChange'
+  | 'enableBiometric'
+  | 'disableBiometric';
+
+const pinToastConfig = {
+  error: ({ text1, text2 }: ToastConfigParams<any>) => (
+    <View style={styles.pinToastContainer}>
+      <Ionicons name="alert-circle" size={24} color="#F04438" style={styles.pinToastIcon} />
+      <View style={styles.pinToastTextContainer}>
+        {text1 ? <Text style={styles.pinToastTitle}>{text1}</Text> : null}
+        {text2 ? <Text style={styles.pinToastSubtitle}>{text2}</Text> : null}
+      </View>
+    </View>
+  )
+};
 
 export default function SettingsScreen() {
   const router = useRouter();
   const {
     walletAddress,
+    wallets,
+    setWalletAddress,
     isConnected,
     demoMode,
     toggleDemoOffline,
     syncPendingTransactions,
-    transactions
+    transactions,
+    disconnectWallet,
+    importWalletFromMnemonic,
+    generateWalletAddress,
+    displayCurrency,
+    setDisplayCurrency,
+    userName
   } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
+
+  const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
 
   const isOfflineDemo = demoMode?.simulateOffline ?? false;
   const pendingCount = transactions
     ? transactions.filter((t) => t.status === 'pending' || t.status === 'syncing').length
     : 0;
 
-  const [isPasscodeEnabled, setIsPasscodeEnabled] = useState(true);
-  const [biometricsEnabled, setBiometricsEnabled] = useState(true);
+  const appLockEnabled = useSecurityStore((state) => state.appLockEnabled);
+  const biometricEnabled = useSecurityStore((state) => state.biometricEnabled);
+  const enableAppLock = useSecurityStore((state) => state.enableAppLock);
+  const disableAppLock = useSecurityStore((state) => state.disableAppLock);
+  const enableBiometric = useSecurityStore((state) => state.enableBiometric);
+  const disableBiometric = useSecurityStore((state) => state.disableBiometric);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [ghostModeEnabled, setGhostModeEnabled] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isCurrencyModalOpen, setIsCurrencyModalOpen] = useState(false);
+  const [isPendingQueueModalOpen, setIsPendingQueueModalOpen] = useState(false);
 
-  // PIN / Passcode Lock Modal States
-  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
-  const [savedPin, setSavedPin] = useState('1234');
-  const [enteredPin, setEnteredPin] = useState('');
-  const [pinStep, setPinStep] = useState<'enter' | 'create' | 'confirm'>('create');
-  const [tempPin, setTempPin] = useState('');
+  // Wallet Import & Backup states
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importInput, setImportInput] = useState('');
+  const [importLabel, setImportLabel] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [backupMnemonic, setBackupMnemonic] = useState('');
 
-  // Biometric Scan Modal States
-  const [isBioModalOpen, setIsBioModalOpen] = useState(false);
-  const [bioStatus, setBioStatus] = useState<'idle' | 'scanning' | 'success'>('idle');
-
-  const triggerBiometricScan = () => {
-    setIsBioModalOpen(true);
-    setBioStatus('scanning');
-    setTimeout(() => {
-      setBioStatus('success');
-      setTimeout(() => {
-        setIsBioModalOpen(false);
-        setBioStatus('idle');
-        setBiometricsEnabled(true);
-        Toast.show({
-          type: 'success',
-          text1: 'Biometric Authenticated',
-          text2: 'Fingerprint & Touch ID verified successfully!'
-        });
-      }, 800);
-    }, 1200);
+  const handleOpenImportModal = () => {
+    setImportInput('');
+    setImportLabel('');
+    setIsImportModalOpen(true);
   };
 
-  // Handle Numeric Keypad Presses
-  const handleNumPress = (num: string) => {
-    if (enteredPin.length < 4) {
-      const nextPin = enteredPin + num;
-      setEnteredPin(nextPin);
+  const handleExecuteImport = async () => {
+    if (!importInput.trim()) {
+      Toast.show({ type: 'error', text1: 'Missing Input', text2: 'Please enter your 25-word seed phrase or address.' });
+      return;
+    }
 
-      if (nextPin.length === 4) {
-        setTimeout(() => {
-          if (pinStep === 'create') {
-            setTempPin(nextPin);
-            setEnteredPin('');
-            setPinStep('confirm');
-          } else if (pinStep === 'confirm') {
-            if (nextPin === tempPin) {
-              setSavedPin(nextPin);
-              setIsPasscodeEnabled(true);
-              setIsPinModalOpen(false);
-              setEnteredPin('');
-              Toast.show({
-                type: 'success',
-                text1: 'PIN Lock Activated',
-                text2: `Your new 4-digit security PIN is set!`
-              });
-            } else {
-              setEnteredPin('');
-              Toast.show({
-                type: 'error',
-                text1: 'PIN Mismatch',
-                text2: 'PINs do not match. Please try again.'
-              });
-            }
-          } else {
-            // Unlock verification mode
-            if (nextPin === savedPin) {
-              setIsPinModalOpen(false);
-              setEnteredPin('');
-              Toast.show({
-                type: 'success',
-                text1: 'Unlocked Successfully',
-                text2: 'Security PIN verified'
-              });
-            } else {
-              setEnteredPin('');
-              Toast.show({
-                type: 'error',
-                text1: 'Incorrect PIN',
-                text2: 'The PIN you entered is incorrect.'
-              });
-            }
-          }
-        }, 150);
+    setIsImporting(true);
+    try {
+      const res = await importWalletFromMnemonic(importInput, importLabel);
+      if (res.success) {
+        setIsImportModalOpen(false);
+        Toast.show({
+          type: 'success',
+          text1: 'Wallet Imported!',
+          text2: `Active address: ${res.address?.slice(0, 10)}...`
+        });
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Import Failed',
+          text2: res.error || 'Invalid seed phrase or address'
+        });
       }
+    } catch (err: any) {
+      Toast.show({
+        type: 'error',
+        text1: 'Import Failed',
+        text2: err?.message || 'Failed to import wallet'
+      });
+    } finally {
+      setIsImporting(false);
     }
   };
 
-  const handleBackspace = () => {
-    setEnteredPin((prev) => prev.slice(0, -1));
+  const handleOpenBackupModal = async () => {
+    if (!walletAddress) {
+      Toast.show({ type: 'error', text1: 'No Active Wallet', text2: 'Please create or import a wallet first.' });
+      return;
+    }
+
+    try {
+      const sk = await loadWalletSecretKey(walletAddress);
+      if (!sk) {
+        setImportInput('');
+        setIsImportModalOpen(true);
+        Toast.show({
+          type: 'info',
+          text1: 'Watch-Only Account',
+          text2: 'Enter the 25-word secret seed phrase for this address to activate backup & full sending power.'
+        });
+        return;
+      }
+      const phrase = algosdk.secretKeyToMnemonic(sk);
+      setBackupMnemonic(phrase);
+      setIsBackupModalOpen(true);
+    } catch {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Could not load secret phrase.' });
+    }
+  };
+
+  const [pendingGeneratedMnemonic, setPendingGeneratedMnemonic] = useState<string | null>(null);
+
+  const handleGenerateNewWallet = async () => {
+    try {
+      const { mnemonic } = await generateWalletAddress();
+      setBackupMnemonic(mnemonic);
+      setPendingGeneratedMnemonic(mnemonic);
+      setIsBackupModalOpen(true);
+      Toast.show({
+        type: 'info',
+        text1: 'Mnemonic Generated',
+        text2: 'Complete 3-word verification to activate wallet.'
+      });
+    } catch {
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Could not generate new wallet.' });
+    }
+  };
+
+  const handleBackupModalCancel = () => {
+    if (pendingGeneratedMnemonic) {
+      setPendingGeneratedMnemonic(null);
+      Toast.show({
+        type: 'info',
+        text1: 'Wallet Creation Cancelled',
+        text2: 'Verification incomplete. No wallet was created.'
+      });
+    }
+    setIsBackupModalOpen(false);
+  };
+
+  const handleBackupModalDone = async () => {
+    if (pendingGeneratedMnemonic) {
+      const res = await importWalletFromMnemonic(pendingGeneratedMnemonic);
+      setPendingGeneratedMnemonic(null);
+      if (res.success) {
+        Toast.show({
+          type: 'success',
+          text1: 'Wallet Verified & Created!',
+          text2: `Active address: ${res.address?.slice(0, 10)}...`
+        });
+      } else {
+        Toast.show({ type: 'error', text1: 'Activation Failed', text2: res.error || 'Could not activate wallet.' });
+      }
+    }
+    setIsBackupModalOpen(false);
+  };
+
+  const [isPinModalOpen, setIsPinModalOpen] = useState(false);
+  const [enteredPin, setEnteredPin] = useState('');
+  const [pinStep, setPinStep] = useState<SecurityPinStep>('create');
+  const [tempPin, setTempPin] = useState('');
+
+  const openPinModal = (step: SecurityPinStep) => {
+    setPinStep(step);
+    setEnteredPin('');
+    setTempPin('');
+    setIsPinModalOpen(true);
+  };
+
+  const closePinModal = () => {
+    setEnteredPin('');
+    setTempPin('');
+    setIsPinModalOpen(false);
+  };
+
+  const handlePinComplete = async (pin: string) => {
+    try {
+      if (pinStep === 'create' || pinStep === 'createChange') {
+        setTempPin(pin);
+        setEnteredPin('');
+        setPinStep(pinStep === 'create' ? 'confirmCreate' : 'confirmChange');
+        return;
+      }
+
+      if (pinStep === 'confirmCreate' || pinStep === 'confirmChange') {
+        if (pin !== tempPin) {
+          setEnteredPin('');
+          Toast.show({ type: 'error', text1: 'PIN Mismatch', text2: 'PINs do not match. Please try again.' });
+          return;
+        }
+
+        await savePin(pin);
+        if (pinStep === 'confirmCreate') {
+          enableAppLock();
+          Toast.show({ type: 'success', text1: 'PIN Lock Activated', text2: 'Your security PIN is set.' });
+        } else {
+          Toast.show({ type: 'success', text1: 'PIN Updated', text2: 'Your security PIN has been changed.' });
+        }
+        closePinModal();
+        return;
+      }
+
+      const isPinValid = await verifyPin(pin);
+      if (!isPinValid) {
+        setEnteredPin('');
+        if (pinStep === 'verifyCurrentForChange') {
+          Toast.show({
+            type: 'error',
+            text1: 'Incorrect PIN',
+            text2: 'Please try again.',
+            position: 'top',
+            topOffset: 72,
+            visibilityTime: 6000
+          });
+        } else {
+          Toast.show({ type: 'error', text1: 'Incorrect PIN', text2: 'Please try again.' });
+        }
+        return;
+      }
+
+      if (pinStep === 'disableLock') {
+        await removePin();
+        disableAppLock();
+        closePinModal();
+        Toast.show({ type: 'info', text1: 'PIN Lock Disabled', text2: 'App Lock has been turned off.' });
+        return;
+      }
+
+      if (pinStep === 'verifyCurrentForChange') {
+        setEnteredPin('');
+        setPinStep('createChange');
+        return;
+      }
+
+      if (pinStep === 'enableBiometric') {
+        const biometricsAvailable = await canUseBiometrics();
+        if (!biometricsAvailable || !(await authenticateBiometric())) {
+          setEnteredPin('');
+          Toast.show({ type: 'error', text1: 'Biometrics Unavailable', text2: 'Complete device biometric setup, then try again.' });
+          return;
+        }
+
+        enableBiometric();
+        closePinModal();
+        Toast.show({ type: 'success', text1: 'Biometrics Enabled', text2: 'Biometric unlock is now active.' });
+        return;
+      }
+
+      if (pinStep === 'disableBiometric') {
+        disableBiometric();
+        closePinModal();
+        Toast.show({ type: 'info', text1: 'Biometrics Disabled', text2: 'Biometric unlock has been turned off.' });
+      }
+    } catch {
+      setEnteredPin('');
+      Toast.show({ type: 'error', text1: 'Security Update Failed', text2: 'Please try again.' });
+    }
+  };
+
+  const handleNumPress = (num: string) => {
+    if (enteredPin.length >= 4) {
+      return;
+    }
+
+    const nextPin = enteredPin + num;
+    setEnteredPin(nextPin);
+    if (nextPin.length === 4) {
+      void handlePinComplete(nextPin);
+    }
   };
 
   const formattedAddress = walletAddress
@@ -148,14 +347,19 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleSelectCurrency = () => {
+    setIsCurrencyModalOpen(true);
+  };
+
   const handleManualSync = async () => {
     setIsSyncing(true);
     try {
       await syncPendingTransactions();
+      await useWalletStore.getState().refreshBalance();
       Toast.show({
         type: 'success',
         text1: 'Sync Completed',
-        text2: 'Pending offline transactions synced with testnet'
+        text2: 'Offline transactions synced with Algorand Testnet'
       });
     } catch {
       Toast.show({
@@ -168,25 +372,44 @@ export default function SettingsScreen() {
     }
   };
 
+  const handleToggleOfflineSwitch = async (val: boolean) => {
+    toggleDemoOffline();
+    if (!val) {
+      // Switching from Offline -> Online: sync pending queue immediately
+      await handleManualSync();
+    } else {
+      Toast.show({
+        type: 'info',
+        text1: 'Offline Mode Active',
+        text2: 'Simulating zero-data vault payments'
+      });
+    }
+  };
+
   const handleDisconnectWallet = () => {
-    Alert.alert(
-      'Disconnect Wallet',
-      'Are you sure you want to disconnect your GhostPay account? Make sure your recovery seed phrase is backed up.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Disconnect',
-          style: 'destructive',
-          onPress: () => {
-            Toast.show({
-              type: 'info',
-              text1: 'Wallet Disconnected',
-              text2: 'Please sign in or restore seed phrase'
-            });
-          }
-        }
-      ]
-    );
+    setIsDisconnectModalOpen(true);
+  };
+
+  const handleConfirmDisconnect = async () => {
+    try {
+      setIsDisconnecting(true);
+      await disconnectWallet();
+      setIsDisconnectModalOpen(false);
+      Toast.show({
+        type: 'info',
+        text1: 'Wallet Disconnected',
+        text2: 'Your wallet has been disconnected.'
+      });
+      router.replace('/');
+    } catch {
+      Toast.show({
+        type: 'error',
+        text1: 'Disconnect Error',
+        text2: 'Failed to disconnect wallet.'
+      });
+    } finally {
+      setIsDisconnecting(false);
+    }
   };
 
   return (
@@ -212,69 +435,155 @@ export default function SettingsScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          {/* User Profile Card */}
-          <View style={styles.profileCard}>
-            <View style={styles.avatarWrapper}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>GP</Text>
-              </View>
-              <View style={[styles.statusBadge, { backgroundColor: isConnected ? '#12B76A' : '#F79E1B' }]} />
-            </View>
+          {/* User Profile Card & Status Banner (Only visible if wallet exists) */}
+          {Boolean(walletAddress) && (
+            <>
+              {/* User Profile Card */}
+              <View style={styles.profileCard}>
+                <View style={styles.avatarWrapper}>
+                  <View style={styles.avatar}>
+                    <Text style={styles.avatarText}>
+                      {userName
+                        ? userName
+                            .split(' ')
+                            .map((n) => n[0])
+                            .join('')
+                            .substring(0, 2)
+                            .toUpperCase()
+                        : 'GP'}
+                    </Text>
+                  </View>
+                  <View style={[styles.statusBadge, { backgroundColor: isConnected ? '#12B76A' : '#F79E1B' }]} />
+                </View>
 
-            <View style={styles.profileDetails}>
-              <Text style={styles.profileName}>GhostPay User</Text>
-              <Pressable style={styles.addressPill} onPress={handleCopyAddress}>
-                <Text style={styles.addressText}>{formattedAddress}</Text>
-                <Ionicons name="duplicate-outline" size={14} color="#667085" style={{ marginLeft: 4 }} />
-              </Pressable>
-            </View>
+                <View style={styles.profileDetails}>
+                  <Text style={styles.profileName}>{userName || 'GhostPay User'}</Text>
+                  <Pressable style={styles.addressPill} onPress={handleCopyAddress}>
+                    <Text style={styles.addressText}>{formattedAddress}</Text>
+                    <Ionicons name="duplicate-outline" size={14} color="#667085" style={{ marginLeft: 4 }} />
+                  </Pressable>
+                </View>
 
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="shield-checkmark" size={18} color={colors.secondary} />
-            </View>
-          </View>
-
-          {/* Network & Offline Status Banner */}
-          <View style={styles.statusCard}>
-            <View style={styles.statusRow}>
-              <View style={styles.statusLeft}>
-                <Ionicons
-                  name={isOfflineDemo ? 'cloud-offline' : 'globe'}
-                  size={22}
-                  color={isOfflineDemo ? '#F79E1B' : '#12B76A'}
-                />
-                <View style={{ marginLeft: 12 }}>
-                  <Text style={styles.statusTitle}>
-                    {isOfflineDemo ? 'Offline Mode (Simulation)' : 'Algorand Testnet Connected'}
-                  </Text>
-                  <Text style={styles.statusSubtitle}>
-                    {pendingCount > 0
-                      ? `${pendingCount} transaction(s) pending sync`
-                      : 'Real-time node sync active'}
-                  </Text>
+                <View style={styles.verifiedBadge}>
+                  <Ionicons name="shield-checkmark" size={18} color={colors.secondary} />
                 </View>
               </View>
 
-              <Switch
-                value={isOfflineDemo}
-                onValueChange={toggleDemoOffline}
-                trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
-                thumbColor={colors.white}
-              />
-            </View>
+              {/* Network & Offline Status Banner */}
+              <View style={styles.statusCard}>
+                <View style={styles.statusRow}>
+                  <View style={styles.statusLeft}>
+                    <Ionicons
+                      name={isOfflineDemo ? 'cloud-offline' : 'globe'}
+                      size={22}
+                      color={isOfflineDemo ? '#F79E1B' : '#12B76A'}
+                    />
+                    <View style={{ marginLeft: 12 }}>
+                      <Text style={styles.statusTitle}>
+                        {isOfflineDemo ? 'Offline Mode (Simulation)' : 'Algorand Testnet Connected'}
+                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                        <Text style={styles.statusSubtitle}>
+                          {pendingCount > 0
+                            ? `${pendingCount} transaction(s) pending sync`
+                            : 'Real-time node sync active'}
+                        </Text>
+                        {pendingCount > 0 && (
+                          <Pressable
+                            style={styles.viewQueuePill}
+                            onPress={() => setIsPendingQueueModalOpen(true)}
+                          >
+                            <Ionicons name="eye" size={12} color={colors.primaryDark} style={{ marginRight: 3 }} />
+                            <Text style={styles.viewQueueText}>View</Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    </View>
+                  </View>
 
-            {pendingCount > 0 && (
-              <Pressable
-                style={[styles.syncButton, isSyncing && { opacity: 0.6 }]}
-                onPress={handleManualSync}
-                disabled={isSyncing}
-              >
-                <Ionicons name="sync" size={16} color={colors.primaryDark} style={{ marginRight: 6 }} />
-                <Text style={styles.syncButtonText}>
-                  {isSyncing ? 'Syncing...' : 'Sync Pending Queue Now'}
-                </Text>
+                  <Switch
+                    value={isOfflineDemo}
+                    onValueChange={handleToggleOfflineSwitch}
+                    trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
+                    thumbColor={colors.white}
+                  />
+                </View>
+
+                <Pressable
+                  style={[styles.syncButton, isSyncing && { opacity: 0.6 }]}
+                  onPress={handleManualSync}
+                  disabled={isSyncing}
+                >
+                  <Ionicons name="sync" size={16} color={colors.primaryDark} style={{ marginRight: 6 }} />
+                  <Text style={styles.syncButtonText}>
+                    {isSyncing
+                      ? 'Syncing with Algorand Node...'
+                      : pendingCount > 0
+                        ? `Sync ${pendingCount} Pending Queue Now`
+                        : 'Sync Node & Refresh Balance'}
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          )}
+
+          {/* Group 0: Wallets & Key Management */}
+          <View style={styles.sectionGroup}>
+            <Text style={styles.groupHeaderTitle}>WALLETS & KEY MANAGEMENT</Text>
+
+            <View style={styles.settingsCard}>
+              {/* Row 1: Import Wallet with 25-Word Mnemonic or Address */}
+              <Pressable style={styles.settingRow} onPress={handleOpenImportModal}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconCircle, { backgroundColor: '#E4F2EB' }]}>
+                    <Ionicons name="download-outline" size={20} color="#12B76A" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingLabel}>Import Wallet / Seed Phrase</Text>
+                    <Text style={styles.settingSubLabel} numberOfLines={1}>
+                      Import 25-word seed phrase or address
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
               </Pressable>
-            )}
+
+              <View style={styles.divider} />
+
+              {/* Row 2: Backup Secret Mnemonic */}
+              <Pressable style={styles.settingRow} onPress={handleOpenBackupModal}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconCircle, { backgroundColor: '#FEF3F2' }]}>
+                    <Ionicons name="shield-checkmark-outline" size={20} color="#D92D20" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingLabel}>Backup 25-Word Mnemonic</Text>
+                    <Text style={styles.settingSubLabel} numberOfLines={1}>
+                      Reveal & save your 25-word recovery key
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
+              </Pressable>
+
+              <View style={styles.divider} />
+
+              {/* Row 3: Generate New Wallet */}
+              <Pressable style={styles.settingRow} onPress={handleGenerateNewWallet}>
+                <View style={styles.settingLeft}>
+                  <View style={[styles.iconCircle, { backgroundColor: '#F0EBFB' }]}>
+                    <Ionicons name="add-circle-outline" size={20} color="#7F56D9" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingLabel}>Generate New Wallet</Text>
+                    <Text style={styles.settingSubLabel} numberOfLines={1}>
+                      Create a new Algorand TestNet account
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
+              </Pressable>
+            </View>
           </View>
 
           {/* Group 1: Security & Privacy */}
@@ -291,24 +600,17 @@ export default function SettingsScreen() {
                   <View>
                     <Text style={styles.settingLabel}>PIN / Password Lock</Text>
                     <Text style={styles.settingSubLabel}>
-                      {isPasscodeEnabled ? '4-Digit Code Active (••••)' : 'Require PIN to open app'}
+                      {appLockEnabled ? '4-Digit Code Active (••••)' : 'Require PIN to open app'}
                     </Text>
                   </View>
                 </View>
                 <Switch
-                  value={isPasscodeEnabled}
+                  value={appLockEnabled}
                   onValueChange={(val) => {
                     if (val) {
-                      setPinStep('create');
-                      setEnteredPin('');
-                      setIsPinModalOpen(true);
+                      openPinModal('create');
                     } else {
-                      setIsPasscodeEnabled(false);
-                      Toast.show({
-                        type: 'info',
-                        text1: 'PIN Lock Disabled',
-                        text2: 'Password protection turned off'
-                      });
+                      openPinModal('disableLock');
                     }
                   }}
                   trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
@@ -317,16 +619,12 @@ export default function SettingsScreen() {
               </View>
 
               {/* Row 2: Change Security PIN (Separate Row) */}
-              {isPasscodeEnabled && (
+              {appLockEnabled && (
                 <>
                   <View style={styles.divider} />
                   <Pressable
                     style={styles.settingRow}
-                    onPress={() => {
-                      setPinStep('create');
-                      setEnteredPin('');
-                      setIsPinModalOpen(true);
-                    }}
+                    onPress={() => openPinModal('verifyCurrentForChange')}
                   >
                     <View style={styles.settingLeft}>
                       <View style={[styles.iconCircle, { backgroundColor: '#F0EBFB' }]}>
@@ -348,65 +646,40 @@ export default function SettingsScreen() {
               <View style={styles.settingRow}>
                 <Pressable
                   style={styles.settingLeft}
-                  onPress={triggerBiometricScan}
+                  onPress={() => {
+                    if (appLockEnabled) {
+                      openPinModal(biometricEnabled ? 'disableBiometric' : 'enableBiometric');
+                    }
+                  }}
                 >
                   <View style={[styles.iconCircle, { backgroundColor: '#E4F2EB' }]}>
                     <Ionicons name="finger-print" size={20} color="#12B76A" />
                   </View>
                   <View>
-                    <Text style={styles.settingLabel}>Fingerprint & Face ID</Text>
+                    <Text style={styles.settingLabel}>Biometric Lock</Text>
                     <Text style={styles.settingSubLabel}>
-                      {biometricsEnabled ? 'Active • Tap to test scanner' : 'Tap to enable biometrics'}
+                      {biometricEnabled
+                        ? 'Active • PIN required to disable'
+                        : appLockEnabled
+                          ? 'PIN and biometric verification required'
+                          : 'Enable App Lock first'}
                     </Text>
                   </View>
                 </Pressable>
                 <Switch
-                  value={biometricsEnabled}
+                  value={biometricEnabled}
+                  disabled={!appLockEnabled}
                   onValueChange={(val) => {
                     if (val) {
-                      triggerBiometricScan();
+                      openPinModal('enableBiometric');
                     } else {
-                      setBiometricsEnabled(false);
-                      Toast.show({
-                        type: 'info',
-                        text1: 'Biometrics Disabled',
-                        text2: 'Fingerprint & Face ID turned off'
-                      });
+                      openPinModal('disableBiometric');
                     }
                   }}
                   trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
                   thumbColor={colors.white}
                 />
               </View>
-
-              <View style={styles.divider} />
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.iconCircle, { backgroundColor: '#F0EBFB' }]}>
-                    <Ionicons name="eye-off" size={20} color="#7F56D9" />
-                  </View>
-                  <Text style={styles.settingLabel}>Ghost Stealth Mode</Text>
-                </View>
-                <Switch
-                  value={ghostModeEnabled}
-                  onValueChange={setGhostModeEnabled}
-                  trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
-                  thumbColor={colors.white}
-                />
-              </View>
-
-              <View style={styles.divider} />
-
-              <Pressable style={styles.settingRow} onPress={() => Alert.alert('Backup Seed Phrase', 'Your 24-word recovery seed is encrypted.')}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.iconCircle, { backgroundColor: '#FEF0C7' }]}>
-                    <Ionicons name="key" size={20} color="#DC6803" />
-                  </View>
-                  <Text style={styles.settingLabel}>Backup Mnemonic Phrase</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
-              </Pressable>
             </View>
           </View>
 
@@ -432,7 +705,7 @@ export default function SettingsScreen() {
 
               <View style={styles.divider} />
 
-              <Pressable style={styles.settingRow} onPress={() => Toast.show({ type: 'info', text1: 'Default Currency', text2: 'USD ($) set as default display' })}>
+              <Pressable style={styles.settingRow} onPress={handleSelectCurrency}>
                 <View style={styles.settingLeft}>
                   <View style={[styles.iconCircle, { backgroundColor: '#F0F9FF' }]}>
                     <Ionicons name="cash" size={20} color="#026AA7" />
@@ -440,7 +713,9 @@ export default function SettingsScreen() {
                   <Text style={styles.settingLabel}>Display Currency</Text>
                 </View>
                 <View style={styles.settingRightPill}>
-                  <Text style={styles.settingRightText}>USD ($)</Text>
+                  <Text style={styles.settingRightText}>
+                    {displayCurrency === 'INR' ? 'INR (₹)' : displayCurrency === 'EUR' ? 'EUR (€)' : 'USD ($)'}
+                  </Text>
                   <Ionicons name="chevron-forward" size={16} color="#98A2B3" style={{ marginLeft: 4 }} />
                 </View>
               </Pressable>
@@ -462,19 +737,23 @@ export default function SettingsScreen() {
                 <Ionicons name="chevron-forward" size={18} color="#98A2B3" />
               </Pressable>
 
-              <View style={styles.divider} />
+              {Boolean(walletAddress) && (
+                <>
+                  <View style={styles.divider} />
 
-              <Pressable style={styles.settingRow} onPress={handleDisconnectWallet}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.iconCircle, { backgroundColor: '#FEE4E2' }]}>
-                    <Ionicons name="log-out" size={20} color="#D92D20" />
-                  </View>
-                  <Text style={[styles.settingLabel, { color: '#D92D20', fontFamily: 'Inter_700Bold' }]}>
-                    Disconnect Wallet
-                  </Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color="#D92D20" />
-              </Pressable>
+                  <Pressable style={styles.settingRow} onPress={handleDisconnectWallet}>
+                    <View style={styles.settingLeft}>
+                      <View style={[styles.iconCircle, { backgroundColor: '#FEE4E2' }]}>
+                        <Ionicons name="log-out" size={20} color="#D92D20" />
+                      </View>
+                      <Text style={[styles.settingLabel, { color: '#D92D20', fontFamily: 'Inter_700Bold' }]}>
+                        Disconnect Wallet
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#D92D20" />
+                  </Pressable>
+                </>
+              )}
             </View>
           </View>
 
@@ -485,22 +764,200 @@ export default function SettingsScreen() {
         </ScrollView>
       </LinearGradient>
 
+      {/* Currency Selector Modal */}
+      <Modal
+        visible={isCurrencyModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsCurrencyModalOpen(false)}
+      >
+        <View style={styles.currencyModalOverlay}>
+          <Animated.View entering={ZoomIn.duration(350).springify()} style={styles.currencyModalCard}>
+            <Pressable style={styles.modalCloseButton} onPress={() => setIsCurrencyModalOpen(false)}>
+              <Ionicons name="close" size={20} color={colors.primaryDark} />
+            </Pressable>
+
+            <Text style={styles.modalTitle}>Display Currency</Text>
+            <Text style={styles.modalSub}>Choose your default currency for balance calculations</Text>
+
+            <View style={styles.optionsList}>
+              {[
+                { code: 'USD', name: 'USD ($) - US Dollar', symbol: '$' },
+                { code: 'INR', name: 'INR (₹) - Indian Rupee', symbol: '₹' },
+                { code: 'EUR', name: 'EUR (€) - Euro', symbol: '€' }
+              ].map((item) => {
+                const isSelected = displayCurrency === item.code;
+                return (
+                  <Pressable
+                    key={item.code}
+                    style={[styles.optionRow, isSelected && styles.optionRowSelected]}
+                    onPress={() => {
+                      setDisplayCurrency(item.code as 'USD' | 'INR' | 'EUR');
+                      setIsCurrencyModalOpen(false);
+                      Toast.show({
+                        type: 'success',
+                        text1: 'Currency Updated',
+                        text2: `Display set to ${item.name}`
+                      });
+                    }}
+                  >
+                    <View style={styles.optionInfo}>
+                      <View style={[styles.symbolCircle, isSelected && styles.symbolCircleSelected]}>
+                        <Text style={[styles.symbolText, isSelected && styles.symbolTextSelected]}>
+                          {item.symbol}
+                        </Text>
+                      </View>
+                      <Text style={[styles.optionNameText, isSelected && styles.optionNameSelected]}>
+                        {item.name}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={22} color={colors.secondary} />
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Custom Styled Disconnect Confirmation Modal */}
+      <Modal
+        visible={isDisconnectModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsDisconnectModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View entering={ZoomIn.duration(350).springify()} style={styles.disconnectModalCard}>
+            <View style={styles.disconnectIconBadge}>
+              <Ionicons name="log-out-outline" size={28} color="#D92D20" />
+            </View>
+
+            <Text style={styles.disconnectModalTitle}>Disconnect Wallet?</Text>
+
+            <Text style={styles.disconnectModalSub}>
+              Are you sure you want to disconnect your active wallet? Make sure you have saved your 25-word recovery seed phrase to re-import it.
+            </Text>
+
+            <View style={styles.disconnectActionsRow}>
+              <Pressable
+                style={styles.disconnectCancelBtn}
+                onPress={() => setIsDisconnectModalOpen(false)}
+                disabled={isDisconnecting}
+              >
+                <Text style={styles.disconnectCancelText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.disconnectConfirmBtn}
+                onPress={handleConfirmDisconnect}
+                disabled={isDisconnecting}
+              >
+                {isDisconnecting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="log-out" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.disconnectConfirmText}>Disconnect</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Import Wallet Modal */}
+      <Modal
+        visible={isImportModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsImportModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View entering={ZoomIn.duration(350).springify()} style={styles.importModalCard}>
+            <View style={styles.modalHeaderRow}>
+              <View style={styles.modalTitleGroup}>
+                <View style={styles.modalIconCircleGreen}>
+                  <Ionicons name="download-outline" size={22} color="#12B76A" />
+                </View>
+                <View>
+                  <Text style={styles.importModalTitle}>Import Algorand Wallet</Text>
+                  <Text style={styles.importModalSub}>Enter 25-word secret seed phrase or address</Text>
+                </View>
+              </View>
+            </View>
+
+            <Text style={styles.inputFieldLabel}>25-Word Secret Seed Phrase or Address:</Text>
+            <TextInput
+              style={styles.importTextInput}
+              multiline
+              numberOfLines={4}
+              placeholder="e.g. apple banana cherry zebra... OR 26SEOQY3..."
+              placeholderTextColor="#98A2B3"
+              value={importInput}
+              onChangeText={setImportInput}
+            />
+
+            <Text style={styles.inputFieldLabel}>Wallet Label (Optional):</Text>
+            <TextInput
+              style={styles.labelTextInput}
+              placeholder="e.g. Primary Savings"
+              placeholderTextColor="#98A2B3"
+              value={importLabel}
+              onChangeText={setImportLabel}
+            />
+
+            <Pressable
+              style={[styles.primaryImportBtn, (!importInput.trim() || isImporting) && { opacity: 0.5 }]}
+              disabled={!importInput.trim() || isImporting}
+              onPress={handleExecuteImport}
+            >
+              {isImporting ? (
+                <ActivityIndicator size="small" color="#172B3E" />
+              ) : (
+                <>
+                  <Ionicons name="key-outline" size={18} color="#172B3E" style={{ marginRight: 8 }} />
+                  <Text style={styles.primaryImportBtnText}>Import Wallet Now</Text>
+                </>
+              )}
+            </Pressable>
+
+            <Pressable style={styles.secondaryModalBtnAction} onPress={() => setIsImportModalOpen(false)}>
+              <Text style={styles.secondaryModalBtnActionText}>Cancel</Text>
+            </Pressable>
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Secret Mnemonic Backup Modal Component */}
+      <MnemonicBackupModal
+        visible={isBackupModalOpen}
+        mnemonic={backupMnemonic}
+        onCopy={() => {
+          void Clipboard.setStringAsync(backupMnemonic);
+          Toast.show({ type: 'success', text1: 'Copied to Clipboard', text2: 'Secret 25-word phrase copied securely.' });
+        }}
+        onDone={handleBackupModalDone}
+        onCancel={handleBackupModalCancel}
+      />
+
       {/* Passcode / PIN Keypad Modal */}
       <Modal
         visible={isPinModalOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setIsPinModalOpen(false)}
+        onRequestClose={closePinModal}
       >
         <View style={styles.pinModalOverlay}>
+          <Toast config={pinToastConfig} />
           <Animated.View entering={ZoomIn.duration(300)} style={styles.pinModalCard}>
             {/* Close Icon */}
             <Pressable
               style={styles.pinModalCloseBtn}
-              onPress={() => {
-                setIsPinModalOpen(false);
-                setEnteredPin('');
-              }}
+              onPress={closePinModal}
             >
               <Ionicons name="close" size={20} color={colors.white} />
             </Pressable>
@@ -514,16 +971,26 @@ export default function SettingsScreen() {
             <Text style={styles.pinModalTitle}>
               {pinStep === 'create'
                 ? 'Set 4-Digit Security PIN'
-                : pinStep === 'confirm'
-                ? 'Confirm Your Security PIN'
-                : 'Enter Security PIN'}
+                : pinStep === 'confirmCreate'
+                  ? 'Confirm Your Security PIN'
+                  : pinStep === 'verifyCurrentForChange'
+                    ? 'Verify Current PIN'
+                    : pinStep === 'createChange'
+                      ? 'Set New Security PIN'
+                      : pinStep === 'confirmChange'
+                        ? 'Confirm New Security PIN'
+                        : pinStep === 'disableLock'
+                          ? 'Disable App Lock'
+                          : pinStep === 'enableBiometric'
+                            ? 'Verify PIN to Enable Biometrics'
+                            : 'Verify PIN to Disable Biometrics'}
             </Text>
             <Text style={styles.pinModalSub}>
               {pinStep === 'create'
                 ? 'Enter a 4-digit code to lock GhostPay'
-                : pinStep === 'confirm'
-                ? 'Re-enter your 4-digit PIN to confirm'
-                : 'Verify your PIN to unlock'}
+                : pinStep === 'confirmCreate' || pinStep === 'confirmChange'
+                  ? 'Re-enter your 4-digit PIN to confirm'
+                  : 'Enter your current 4-digit PIN to continue'}
             </Text>
 
             {/* 4 Passcode Dots */}
@@ -547,10 +1014,7 @@ export default function SettingsScreen() {
                     <Pressable
                       key={key}
                       style={styles.keypadButtonSpecial}
-                      onPress={() => {
-                        setIsPinModalOpen(false);
-                        setEnteredPin('');
-                      }}
+                      onPress={closePinModal}
                     >
                       <Text style={styles.keypadCancelText}>Cancel</Text>
                     </Pressable>
@@ -562,7 +1026,7 @@ export default function SettingsScreen() {
                     <Pressable
                       key={key}
                       style={styles.keypadButtonSpecial}
-                      onPress={handleBackspace}
+                      onPress={() => setEnteredPin((current) => current.slice(0, -1))}
                     >
                       <Ionicons name="backspace-outline" size={24} color={colors.white} />
                     </Pressable>
@@ -584,66 +1048,13 @@ export default function SettingsScreen() {
         </View>
       </Modal>
 
-      {/* Biometric / Fingerprint Verification Modal */}
-      <Modal
-        visible={isBioModalOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIsBioModalOpen(false)}
-      >
-        <View style={styles.pinModalOverlay}>
-          <Animated.View entering={ZoomIn.duration(300)} style={styles.bioModalCard}>
-            {/* Close Button */}
-            <Pressable
-              style={styles.pinModalCloseBtn}
-              onPress={() => setIsBioModalOpen(false)}
-            >
-              <Ionicons name="close" size={20} color={colors.white} />
-            </Pressable>
-
-            {/* Glowing Fingerprint Sensor Button */}
-            <Pressable style={styles.bioSensorCircle} onPress={triggerBiometricScan}>
-              <Ionicons
-                name="finger-print"
-                size={54}
-                color={bioStatus === 'success' ? '#12B76A' : colors.secondary}
-              />
-            </Pressable>
-
-            <Text style={styles.pinModalTitle}>
-              {bioStatus === 'scanning'
-                ? 'Scanning Fingerprint...'
-                : bioStatus === 'success'
-                ? 'Biometric Verified!'
-                : 'Touch Fingerprint Sensor'}
-            </Text>
-            <Text style={styles.pinModalSub}>
-              {bioStatus === 'scanning'
-                ? 'Hold your finger steady on the sensor'
-                : bioStatus === 'success'
-                ? 'Touch ID & Face ID authenticated successfully'
-                : 'Place your finger on the sensor or camera to verify'}
-            </Text>
-
-            {/* Status Pill Indicator */}
-            <View style={[styles.bioStatusPill, bioStatus === 'success' && styles.bioStatusPillSuccess]}>
-              <Ionicons
-                name={bioStatus === 'success' ? 'checkmark-circle' : 'scan'}
-                size={16}
-                color={bioStatus === 'success' ? '#12B76A' : colors.secondary}
-                style={{ marginRight: 6 }}
-              />
-              <Text style={[styles.bioStatusPillText, bioStatus === 'success' && styles.bioStatusPillTextSuccess]}>
-                {bioStatus === 'scanning'
-                  ? 'Authenticating...'
-                  : bioStatus === 'success'
-                  ? 'Access Granted'
-                  : 'Touch Sensor'}
-              </Text>
-            </View>
-          </Animated.View>
-        </View>
-      </Modal>
+      {/* Pending Offline Queue Modal */}
+      <PendingQueueModal
+        visible={isPendingQueueModalOpen}
+        onClose={() => setIsPendingQueueModalOpen(false)}
+        onSyncAll={handleManualSync}
+        isSyncing={isSyncing}
+      />
     </SafeAreaView>
   );
 }
@@ -814,16 +1225,30 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: 'Inter_700Bold'
   },
+  viewQueuePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 2,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginLeft: 8
+  },
+  viewQueueText: {
+    fontSize: 11,
+    fontFamily: 'Inter_700Bold',
+    color: colors.primaryDark
+  },
   sectionGroup: {
     marginBottom: 20
   },
   groupHeaderTitle: {
-    color: '#5C768D',
+    color: '#475765ff',
     fontSize: 11,
     fontFamily: 'Inter_700Bold',
     letterSpacing: 0.2,
-    marginBottom: 8,
-    marginLeft: 4
+    marginTop: 10,
+    marginBottom: 15,
+    marginLeft: 10
   },
   settingsCard: {
     backgroundColor: '#FFFFFF',
@@ -844,7 +1269,9 @@ const styles = StyleSheet.create({
   },
   settingLeft: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+    flex: 1,
+    marginRight: 8
   },
   iconCircle: {
     width: 38,
@@ -906,6 +1333,42 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 20
+  },
+  pinToastContainer: {
+    width: '90%',
+    maxWidth: 420,
+    backgroundColor: '#172B3E',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(240, 68, 56, 0.4)',
+    borderLeftWidth: 5,
+    borderLeftColor: '#F04438',
+    elevation: 12,
+    shadowColor: '#F04438',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12
+  },
+  pinToastIcon: {
+    marginRight: 12
+  },
+  pinToastTextContainer: {
+    flex: 1
+  },
+  pinToastTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    marginBottom: 2
+  },
+  pinToastSubtitle: {
+    color: 'rgba(255, 255, 255, 0.75)',
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium'
   },
   pinModalCard: {
     width: '100%',
@@ -1057,5 +1520,285 @@ const styles = StyleSheet.create({
   },
   bioStatusPillTextSuccess: {
     color: '#12B76A'
+  },
+  currencyModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(13, 30, 47, 0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  currencyModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    position: 'relative',
+    elevation: 10,
+    shadowColor: '#0D1E2F',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 15
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 18,
+    right: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10
+  },
+  modalTitle: {
+    fontSize: 19,
+    fontFamily: 'Inter_700Bold',
+    color: colors.primaryDark,
+    marginBottom: 6
+  },
+  modalSub: {
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#667085',
+    lineHeight: 18,
+    marginBottom: 20
+  },
+  optionsList: {
+    gap: 12
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#F2F4F7',
+    backgroundColor: '#F9FAFB'
+  },
+  optionRowSelected: {
+    borderColor: colors.secondary,
+    backgroundColor: '#ECFDF3'
+  },
+  optionInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  symbolCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#EAECF0',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  symbolCircleSelected: {
+    backgroundColor: '#D1FADF'
+  },
+  symbolText: {
+    fontSize: 16,
+    fontFamily: 'Inter_700Bold',
+    color: '#475467'
+  },
+  symbolTextSelected: {
+    color: '#027A48'
+  },
+  optionNameText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#344054'
+  },
+  optionNameSelected: {
+    color: colors.primaryDark
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(23, 43, 62, 0.75)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20
+  },
+  disconnectModalCard: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16
+  },
+  disconnectIconBadge: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#FEE4E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16
+  },
+  disconnectModalTitle: {
+    fontSize: 20,
+    fontFamily: 'Orbitron_700Bold',
+    color: '#101828',
+    textAlign: 'center',
+    marginBottom: 8
+  },
+  disconnectModalSub: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: '#667085',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24
+  },
+  disconnectActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    gap: 12
+  },
+  disconnectCancelBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#F2F4F7',
+    borderWidth: 1,
+    borderColor: '#D0D5DD',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  disconnectCancelText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#344054'
+  },
+  disconnectConfirmBtn: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#D92D20',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2
+  },
+  disconnectConfirmText: {
+    fontSize: 14,
+    fontFamily: 'Inter_700Bold',
+    color: '#FFFFFF'
+  },
+  /* Import Modal Styles */
+  importModalCard: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    elevation: 10,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16
+  },
+  modalHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16
+  },
+  modalTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  modalIconCircleGreen: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#E4F2EB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12
+  },
+  modalCloseBtnCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F2F4F7',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  importModalTitle: {
+    fontSize: 17,
+    fontFamily: 'Inter_700Bold',
+    color: '#101828'
+  },
+  importModalSub: {
+    fontSize: 12,
+    fontFamily: 'Inter_400Regular',
+    color: '#667085',
+    marginTop: 2
+  },
+  inputFieldLabel: {
+    fontSize: 12,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#344054',
+    marginBottom: 6,
+    marginTop: 10
+  },
+  importTextInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 12,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#101828',
+    borderWidth: 1,
+    borderColor: '#D0D5DD',
+    minHeight: 90,
+    textAlignVertical: 'top'
+  },
+  labelTextInput: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    padding: 12,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: '#101828',
+    borderWidth: 1,
+    borderColor: '#D0D5DD'
+  },
+  primaryImportBtn: {
+    flexDirection: 'row',
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: '#05DA93',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20
+  },
+  primaryImportBtnText: {
+    fontSize: 15,
+    fontFamily: 'Inter_700Bold',
+    color: '#172B3E'
+  },
+  secondaryModalBtnAction: {
+    width: '100%',
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8
+  },
+  secondaryModalBtnActionText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#667085'
   }
 });

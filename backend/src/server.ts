@@ -8,6 +8,7 @@ import { buildOpenApiSpec } from './docs/openapi.js';
 import { accountRouter } from './routes/accountRoutes.js';
 import { algorandRouter } from './routes/algorandRoutes.js';
 import { identityRouter } from './routes/identityRoutes.js';
+import { notificationRouter } from './routes/notificationRoutes.js';
 
 const app = express();
 
@@ -37,6 +38,10 @@ app.use(express.json());
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
+app.get('/', (_request, response) => {
+  response.json({ ok: true, service: 'ghostpay-backend', status: 'running' });
+});
+
 app.get('/health', (_request, response) => {
   response.json({ ok: true, service: 'ghostpay-backend' });
 });
@@ -44,6 +49,7 @@ app.get('/health', (_request, response) => {
 app.use('/api/algorand', algorandRouter);
 app.use('/api/identity', identityRouter);
 app.use('/api/accounts', accountRouter);
+app.use('/api/notifications', notificationRouter);
 
 // ── Swagger UI ────────────────────────────────────────────────────────────────
 // Available at /api/docs in all environments.
@@ -55,11 +61,8 @@ app.use(
   swaggerUi.setup(openApiSpec, {
     customSiteTitle: 'GhostPay API Docs',
     swaggerOptions: {
-      // Persist auth in the browser session so "Try it out" remembers the key
       persistAuthorization: true,
-      // Show request duration in responses
       displayRequestDuration: true,
-      // Expand operations by tag by default
       docExpansion: 'list'
     }
   })
@@ -69,7 +72,10 @@ void connectMongo().catch((error: unknown) => {
   console.error('MongoDB connection failed:', error instanceof Error ? error.message : error);
 });
 
-app.listen(env.port, () => {
-  console.log(`GhostPay backend listening on http://localhost:${env.port}`);
-  console.log(`Swagger UI:             http://localhost:${env.port}/api/docs`);
-});
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(env.port, () => {
+    console.log(`GhostPay backend listening on http://localhost:${env.port}`);
+  });
+}
+
+export default app;

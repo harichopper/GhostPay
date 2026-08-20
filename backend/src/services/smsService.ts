@@ -75,6 +75,11 @@ export async function sendOtpSms(to: string, otpCode: string): Promise<SmsDelive
     return sendViaTwilio(to, message);
   }
 
+  console.log(`\n--- [SIMULATED SMS] ---`);
+  console.log(`To: ${to}`);
+  console.log(`Message: ${message}`);
+  console.log(`-------------------------\n`);
+
   return {
     delivered: true,
     provider: 'none',
