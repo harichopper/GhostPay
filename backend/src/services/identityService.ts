@@ -5,7 +5,9 @@ import { MobileVerificationModel } from '../models/MobileVerification.js';
 import { sendOtpSms } from './smsService.js';
 
 type WalletRecord = {
+  walletId: string;
   address: string;
+  network: string;
   label?: string;
   isDefault: boolean;
   verifiedAt: Date;
@@ -39,14 +41,18 @@ function normalizeSinglePrimaryWallet(wallets: WalletRecord[], preferredAddress?
 }
 
 function toWalletRecords(wallets: Array<{
+  walletId: string;
   address: string;
+  network: string;
   label?: string;
   isDefault: boolean;
   verifiedAt: Date;
   addedAt: Date;
 }>): WalletRecord[] {
   return wallets.map((wallet) => ({
+    walletId: wallet.walletId,
     address: wallet.address,
+    network: wallet.network,
     label: wallet.label,
     isDefault: Boolean(wallet.isDefault),
     verifiedAt: new Date(wallet.verifiedAt),
@@ -67,6 +73,20 @@ export function normalizeMobileNumber(input: string): string {
 function createOtpCode(): string {
   const value = Math.floor(100000 + Math.random() * 900000);
   return `${value}`;
+}
+
+/** Generates a collision-resistant application-level account identifier. */
+export function generateAccountId(): string {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).slice(2, 9);
+  return `acct_${timestamp}${random}`;
+}
+
+/** Generates a collision-resistant application-level wallet identifier. */
+export function generateWalletId(): string {
+  const timestamp = Date.now().toString(36);
+  const random = Math.random().toString(36).slice(2, 9);
+  return `wallet_${timestamp}${random}`;
 }
 
 export async function requestMobileVerification(mobileNumberRaw: string) {
@@ -101,10 +121,15 @@ export async function verifyMobileAndLinkWallet(input: {
   otpCode: string;
   walletAddress: string;
   walletLabel?: string;
+  walletId?: string;
+  network?: string;
+  name?: string;
 }) {
   const mobileNumber = normalizeMobileNumber(input.mobileNumberRaw);
   const otpCode = input.otpCode.trim();
   const walletAddress = input.walletAddress.trim();
+  const network = input.network?.trim() || env.algorandNetwork;
+  const name = input.name?.trim();
 
   if (!algosdk.isValidAddress(walletAddress)) {
     throw new Error('Wallet address is invalid');
@@ -130,24 +155,34 @@ export async function verifyMobileAndLinkWallet(input: {
 
   const now = new Date();
 
+  // Ensure account exists; generate accountId on first creation
+  const existingDoc = await MobileIdentityModel.findOne({ mobileNumber }).lean<{
+    accountId?: string;
+    wallets?: Array<{ address: string; walletId?: string }>;
+  } | null>();
+
+  const accountId = existingDoc?.accountId || generateAccountId();
+  const isFirstWallet = !existingDoc?.wallets || existingDoc.wallets.length === 0;
+
+  // Derive walletId: use provided one, or carry over existing one for this address, or generate new
+  const existingWallet = existingDoc?.wallets?.find((w) => w.address === walletAddress);
+  const walletId = input.walletId?.trim() || existingWallet?.walletId || generateWalletId();
+
   await MobileIdentityModel.updateOne(
     { mobileNumber },
     {
       $setOnInsert: {
         mobileNumber,
+        accountId,
         wallets: []
       },
       $set: {
-        verified: true
+        verified: true,
+        ...(name ? { name } : {})
       }
     },
     { upsert: true }
   );
-
-  const identityBefore = await MobileIdentityModel.findOne({ mobileNumber })
-    .select('wallets')
-    .lean<{ wallets?: Array<{ address: string }> } | null>();
-  const isFirstWallet = !identityBefore?.wallets || identityBefore.wallets.length === 0;
 
   await MobileIdentityModel.updateOne(
     {
@@ -157,7 +192,9 @@ export async function verifyMobileAndLinkWallet(input: {
     {
       $push: {
         wallets: {
+          walletId,
           address: walletAddress,
+          network,
           label: input.walletLabel?.trim() || (isFirstWallet ? 'Primary Wallet' : 'Secondary Wallet'),
           isDefault: isFirstWallet,
           verifiedAt: now,
@@ -228,6 +265,7 @@ export async function getWalletsByMobile(mobileNumberRaw: string) {
   return {
     mobileNumber,
     verified: identity.verified,
+    name: identity.name,
     wallets
   };
 }
@@ -259,6 +297,7 @@ export async function getIdentityByWallet(walletAddressRaw: string) {
   return {
     mobileNumber: identity.mobileNumber,
     verified: identity.verified,
+    name: identity.name,
     wallets: identity.wallets
   };
 }

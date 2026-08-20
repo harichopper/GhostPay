@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-const defaultApiUrl = Platform.OS === 'android' ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+const defaultApiUrl = 'https://temporary-quick-nitrogen-5tqiukf.vercel.app';
 const envApiUrl = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
 	?.EXPO_PUBLIC_API_URL;
 

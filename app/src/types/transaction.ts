@@ -79,6 +79,7 @@ export interface WalletIdentityItem {
 export interface WalletLookupResponse {
   mobileNumber: string;
   verified: boolean;
+  name?: string;
   wallets: WalletIdentityItem[];
 }
 
@@ -93,6 +94,7 @@ export interface WalletIdentityResponse {
   identity: {
     mobileNumber: string;
     verified: boolean;
+    name?: string;
     wallets: WalletIdentityItem[];
   } | null;
 }

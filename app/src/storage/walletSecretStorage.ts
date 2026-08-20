@@ -23,15 +23,15 @@ export async function saveWalletSecretKey(address: string, secretKey: Uint8Array
   const base64 = Buffer.from(secretKey).toString('base64');
   const key = `${WALLET_SECRET_PREFIX}${normalizedAddress}`;
 
-  if (Platform.OS === 'web') {
-    await AsyncStorage.setItem(key, base64);
-    return;
-  }
+  await AsyncStorage.setItem(key, base64);
 
-  await SecureStore.setItemAsync(key, base64, {
-    keychainService: 'ghostpay.wallet',
-    requireAuthentication: false
-  });
+  if (Platform.OS !== 'web') {
+    try {
+      await SecureStore.setItemAsync(key, base64);
+    } catch {
+      // SecureStore error fallback handled by AsyncStorage
+    }
+  }
 }
 
 export async function loadWalletSecretKey(address: string): Promise<Uint8Array | null> {
@@ -41,15 +41,35 @@ export async function loadWalletSecretKey(address: string): Promise<Uint8Array |
   }
 
   const key = `${WALLET_SECRET_PREFIX}${normalizedAddress}`;
-  const base64 = Platform.OS === 'web' ? await AsyncStorage.getItem(key) : await SecureStore.getItemAsync(key);
+  let base64: string | null = null;
+
+  if (Platform.OS !== 'web') {
+    try {
+      base64 = await SecureStore.getItemAsync(key);
+    } catch {
+      base64 = null;
+    }
+  }
+
+  if (!base64) {
+    base64 = await AsyncStorage.getItem(key);
+  }
 
   if (base64) {
     return Uint8Array.from(Buffer.from(base64, 'base64'));
   }
 
-  const legacyBase64 = Platform.OS === 'web'
-    ? await AsyncStorage.getItem(WALLET_SECRET_KEY)
-    : await SecureStore.getItemAsync(WALLET_SECRET_KEY);
+  let legacyBase64: string | null = null;
+  if (Platform.OS !== 'web') {
+    try {
+      legacyBase64 = await SecureStore.getItemAsync(WALLET_SECRET_KEY);
+    } catch {
+      legacyBase64 = null;
+    }
+  }
+  if (!legacyBase64) {
+    legacyBase64 = await AsyncStorage.getItem(WALLET_SECRET_KEY);
+  }
 
   if (!legacyBase64) {
     return null;
@@ -70,9 +90,17 @@ export async function clearWalletSecretKey(address?: string): Promise<void> {
   if (address) {
     await clearSecureValue(`${WALLET_SECRET_PREFIX}${address.trim()}`);
 
-    const legacyBase64 = Platform.OS === 'web'
-      ? await AsyncStorage.getItem(WALLET_SECRET_KEY)
-      : await SecureStore.getItemAsync(WALLET_SECRET_KEY);
+    let legacyBase64: string | null = null;
+    if (Platform.OS !== 'web') {
+      try {
+        legacyBase64 = await SecureStore.getItemAsync(WALLET_SECRET_KEY);
+      } catch {
+        legacyBase64 = null;
+      }
+    }
+    if (!legacyBase64) {
+      legacyBase64 = await AsyncStorage.getItem(WALLET_SECRET_KEY);
+    }
 
     if (legacyBase64) {
       const legacySecret = Uint8Array.from(Buffer.from(legacyBase64, 'base64'));
@@ -90,32 +118,42 @@ export async function clearWalletSecretKey(address?: string): Promise<void> {
 }
 
 async function setSecureValue(key: string, value: string): Promise<void> {
-  if (Platform.OS === 'web') {
-    await AsyncStorage.setItem(key, value);
-    return;
-  }
+  await AsyncStorage.setItem(key, value);
 
-  await SecureStore.setItemAsync(key, value, {
-    keychainService: 'ghostpay.wallet',
-    requireAuthentication: false
-  });
+  if (Platform.OS !== 'web') {
+    try {
+      await SecureStore.setItemAsync(key, value);
+    } catch {
+      // Ignore SecureStore errors
+    }
+  }
 }
 
 async function getSecureValue(key: string): Promise<string | null> {
-  if (Platform.OS === 'web') {
-    return AsyncStorage.getItem(key);
+  let val: string | null = null;
+  if (Platform.OS !== 'web') {
+    try {
+      val = await SecureStore.getItemAsync(key);
+    } catch {
+      val = null;
+    }
   }
-
-  return SecureStore.getItemAsync(key);
+  if (!val) {
+    val = await AsyncStorage.getItem(key);
+  }
+  return val;
 }
 
 async function clearSecureValue(key: string): Promise<void> {
-  if (Platform.OS === 'web') {
-    await AsyncStorage.removeItem(key);
-    return;
-  }
+  await AsyncStorage.removeItem(key);
 
-  await SecureStore.deleteItemAsync(key);
+  if (Platform.OS !== 'web') {
+    try {
+      await SecureStore.deleteItemAsync(key);
+    } catch {
+      // Ignore SecureStore errors
+    }
+  }
 }
 
 export async function savePendingMnemonic(address: string, mnemonic: string): Promise<void> {

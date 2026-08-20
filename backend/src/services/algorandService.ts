@@ -25,28 +25,7 @@ function microToAlgo(value: number): number {
   return value / 1_000_000;
 }
 
-async function resolveAssetIdFromPendingInfo(
-  algod: algosdk.Algodv2,
-  txId: string,
-  maxAdditionalRounds = 4
-): Promise<number | undefined> {
-  let status = await algod.status().do() as { ['last-round']?: unknown };
-  let lastRound = readNumericField(status['last-round'], 0);
 
-  for (let i = 0; i < maxAdditionalRounds; i += 1) {
-    const pending = await algod.pendingTransactionInformation(txId).do() as { ['asset-index']?: unknown };
-    const assetId = readNumericField(pending['asset-index'], 0);
-    if (assetId > 0) {
-      return assetId;
-    }
-
-    await algod.statusAfterBlock(lastRound + 1).do();
-    status = await algod.status().do() as { ['last-round']?: unknown };
-    lastRound = readNumericField(status['last-round'], lastRound + 1);
-  }
-
-  return undefined;
-}
 
 export type AccountAsset = {
   assetId: number;
@@ -79,6 +58,43 @@ export async function getAccountBalance(address: string): Promise<number> {
   const algod = getAlgodClient();
   const accountInfo = await algod.accountInformation(address).do();
   return Number(accountInfo.amount) / 1_000_000;
+}
+
+export async function getAccountTransactions(address: string) {
+  const indexerBaseUrl = env.algorandNetwork === 'mainnet'
+    ? 'https://mainnet-idx.algonode.cloud'
+    : 'https://testnet-idx.algonode.cloud';
+
+  try {
+    const res = await fetch(`${indexerBaseUrl}/v2/accounts/${address}/transactions?limit=35`);
+    if (!res.ok) {
+      return [];
+    }
+    const data = (await res.json()) as { transactions?: any[] };
+    const rawTxs = data.transactions || [];
+
+    return rawTxs.map((tx: any) => {
+      const isPayment = tx['tx-type'] === 'pay';
+      const paymentDetails = tx['payment-transaction'] || {};
+      const amountMicro = paymentDetails.amount || tx.fee || 0;
+      const sender = tx.sender || '';
+      const receiver = paymentDetails.receiver || sender;
+
+      return {
+        id: tx.id || `tx-${Date.now()}`,
+        sender,
+        receiver,
+        amount: amountMicro / 1_000_000,
+        timestamp: tx['round-time'] ? new Date(tx['round-time'] * 1000).toISOString() : new Date().toISOString(),
+        status: 'confirmed',
+        txHash: tx.id,
+        explorerUrl: `${env.explorerTxBaseUrl}${tx.id}`,
+        network: env.algorandNetwork
+      };
+    });
+  } catch (err) {
+    return [];
+  }
 }
 
 export async function getAccountAssets(address: string): Promise<AccountAsset[]> {
@@ -151,171 +167,7 @@ export async function getAccountAssets(address: string): Promise<AccountAsset[]>
   return [algoAsset, ...normalizedAssets];
 }
 
-export async function mintDemoAsset(input?: {
-  assetName?: string;
-  unitName?: string;
-  total?: number;
-  decimals?: number;
-  assetUrl?: string;
-}): Promise<{ txId: string; assetId: number; creator: string; explorerUrl: string; network: string }> {
-  if (!env.signerMnemonic) {
-    throw new Error('Server signer mnemonic is missing. Set ALGORAND_SENDER_MNEMONIC in backend/.env');
-  }
 
-  if (env.algorandNetwork === 'mainnet') {
-    throw new Error('Mint endpoint is restricted to testnet for safety');
-  }
-
-  const assetName = input?.assetName?.trim() || 'GhostPay Token';
-  const unitName = input?.unitName?.trim() || 'GHOST';
-  const total = Number.isFinite(input?.total) ? Math.floor(input!.total as number) : 1_000_000;
-  const decimals = Number.isFinite(input?.decimals) ? Math.floor(input!.decimals as number) : 2;
-  const assetUrl = input?.assetUrl?.trim() || 'https://ghostpay.app/token';
-
-  if (total <= 0) {
-    throw new Error('Asset total must be positive');
-  }
-
-  if (decimals < 0 || decimals > 19) {
-    throw new Error('Asset decimals must be between 0 and 19');
-  }
-
-  const account = algosdk.mnemonicToSecretKey(env.signerMnemonic);
-  const creator = account.addr.toString();
-  const algod = getAlgodClient();
-  const params = await algod.getTransactionParams().do();
-  const networkFeeMicro = readNumericField((params as { fee?: unknown; minFee?: unknown }).fee, 1_000);
-  const minFeeMicro = readNumericField((params as { minFee?: unknown }).minFee, 1_000);
-  const txFeeMicro = Math.max(networkFeeMicro, minFeeMicro, 1_000);
-
-  const txn = algosdk.makeAssetCreateTxnWithSuggestedParamsFromObject({
-    sender: creator,
-    total: BigInt(total),
-    decimals,
-    defaultFrozen: false,
-    unitName,
-    assetName,
-    assetURL: assetUrl,
-    manager: creator,
-    reserve: creator,
-    freeze: creator,
-    clawback: creator,
-    suggestedParams: {
-      ...params,
-      fee: BigInt(txFeeMicro),
-      flatFee: true
-    }
-  });
-
-  const signed = txn.signTxn(account.sk);
-  const response = await algod.sendRawTransaction(signed).do();
-  const confirmation = await algosdk.waitForConfirmation(algod, response.txid, env.confirmationRounds);
-  const confirmedAssetId = readNumericField((confirmation as { ['asset-index']?: unknown })['asset-index'], 0);
-  const resolvedAssetId = confirmedAssetId > 0
-    ? confirmedAssetId
-    : await resolveAssetIdFromPendingInfo(algod, response.txid);
-
-  return {
-    txId: response.txid,
-    assetId: resolvedAssetId ?? 0,
-    creator,
-    explorerUrl: buildExplorerUrl(response.txid),
-    network: env.algorandNetwork
-  };
-}
-
-export async function relaySignedTransaction(input: {
-  signedTxnBase64: string;
-  expectedSender?: string;
-  expectedType?: algosdk.TransactionType;
-}): Promise<{ txId: string; confirmedRound?: number; assetId?: number; explorerUrl: string; network: string }> {
-  const signedBytes = Uint8Array.from(Buffer.from(input.signedTxnBase64, 'base64'));
-  const decoded = algosdk.decodeSignedTransaction(signedBytes);
-  const txn = decoded.txn;
-
-  if (input.expectedType && txn.type !== input.expectedType) {
-    throw new Error(`Signed transaction type mismatch. Expected ${input.expectedType}`);
-  }
-
-  if (input.expectedSender) {
-    const sender = txn.sender.toString();
-    if (sender !== input.expectedSender) {
-      throw new Error('Signed transaction sender does not match request sender');
-    }
-  }
-
-  const algod = getAlgodClient();
-  const response = await algod.sendRawTransaction(signedBytes).do();
-  const confirmation = await algosdk.waitForConfirmation(algod, response.txid, env.confirmationRounds);
-  const confirmedAssetId = readNumericField((confirmation as { ['asset-index']?: unknown })['asset-index'], 0);
-  const resolvedAssetId = confirmedAssetId > 0
-    ? confirmedAssetId
-    : await resolveAssetIdFromPendingInfo(algod, response.txid);
-
-  return {
-    txId: response.txid,
-    confirmedRound: confirmation.confirmedRound ? Number(confirmation.confirmedRound) : undefined,
-    assetId: resolvedAssetId,
-    explorerUrl: buildExplorerUrl(response.txid),
-    network: env.algorandNetwork
-  };
-}
-
-export async function ensureAccountHasMintFunds(address: string): Promise<void> {
-  if (env.algorandNetwork === 'mainnet') {
-    return;
-  }
-
-  if (!env.signerMnemonic) {
-    throw new Error('Mint top-up signer is missing. Configure ALGORAND_SENDER_MNEMONIC or pre-fund the wallet before minting.');
-  }
-
-  const algod = getAlgodClient();
-  let amountMicro = 0;
-  try {
-    const accountInfo = await algod.accountInformation(address).do() as { amount?: unknown };
-    amountMicro = readNumericField(accountInfo.amount, 0);
-  } catch {
-    // Brand-new accounts may not exist on chain yet; treat as 0 and pre-fund.
-    amountMicro = 0;
-  }
-
-  const amountAlgo = microToAlgo(amountMicro);
-
-  // Fresh wallets need enough ALGO for fee + min balance increases from asset creation.
-  const minRequiredAlgo = 0.3;
-  if (amountAlgo >= minRequiredAlgo) {
-    return;
-  }
-
-  const signer = algosdk.mnemonicToSecretKey(env.signerMnemonic);
-  const signerAddress = signer.addr.toString();
-  if (signerAddress === address) {
-    return;
-  }
-
-  const topUpAlgo = Math.max(minRequiredAlgo - amountAlgo + 0.05, 0.2);
-  const params = await algod.getTransactionParams().do();
-  const networkFeeMicro = readNumericField((params as { fee?: unknown; minFee?: unknown }).fee, 1_000);
-  const minFeeMicro = readNumericField((params as { minFee?: unknown }).minFee, 1_000);
-  const txFeeMicro = Math.max(networkFeeMicro, minFeeMicro, 1_000);
-
-  const topUpTxn = algosdk.makePaymentTxnWithSuggestedParamsFromObject({
-    sender: signerAddress,
-    receiver: address,
-    amount: Number(algosdk.algosToMicroalgos(topUpAlgo)),
-    note: new TextEncoder().encode('GhostPay mint prefund'),
-    suggestedParams: {
-      ...params,
-      fee: BigInt(txFeeMicro),
-      flatFee: true
-    }
-  });
-
-  const signed = topUpTxn.signTxn(signer.sk);
-  const response = await algod.sendRawTransaction(signed).do();
-  await algosdk.waitForConfirmation(algod, response.txid, env.confirmationRounds);
-}
 
 export async function sendAlgoPayment(input: {
   sender: string;
@@ -339,12 +191,14 @@ export async function sendAlgoPayment(input: {
     };
   }
 
-  if (input.signedTxnBase64) {
-    if (env.contractAppId > 0 || env.enforceContract) {
-      throw new Error('Client-signed mode currently supports direct payments only. Disable contract mode or use server signer mode.');
-    }
+  const isClientSigned = Boolean(
+    input.signedTxnBase64 &&
+    input.signedTxnBase64 !== 'string' &&
+    input.signedTxnBase64.trim().length > 0
+  );
 
-    const signedBytes = Uint8Array.from(Buffer.from(input.signedTxnBase64, 'base64'));
+  if (isClientSigned) {
+    const signedBytes = Uint8Array.from(Buffer.from(input.signedTxnBase64!, 'base64'));
     const decoded = algosdk.decodeSignedTransaction(signedBytes);
     const txn = decoded.txn;
 
@@ -368,7 +222,7 @@ export async function sendAlgoPayment(input: {
       throw new Error('Signed transaction amount does not match request amount');
     }
 
-    const noteText = txn.note?.length ? new TextDecoder().decode(txn.note) : '';
+    const noteText = txn.note?.length ? Buffer.from(txn.note).toString('utf-8') : '';
     if (!noteText.startsWith(`GhostPay:${input.timestamp}`)) {
       throw new Error('Signed transaction note does not match expected GhostPay timestamp marker');
     }
@@ -391,11 +245,8 @@ export async function sendAlgoPayment(input: {
   }
 
   const account = algosdk.mnemonicToSecretKey(env.signerMnemonic);
+  // Server-signed mode: use backend signer account as the sender
   const senderAddress = account.addr.toString();
-
-  if (input.sender !== senderAddress) {
-    throw new Error(`Sender must match server signer wallet (${senderAddress})`);
-  }
 
   const algod = getAlgodClient();
   const accountInfo = await algod.accountInformation(senderAddress).do();
