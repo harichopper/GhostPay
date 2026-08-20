@@ -130,32 +130,26 @@ export default function HomeScreen() {
     return () => unsubscribe();
   }, []);
 
-  // Network Dot Live Pulsing Animation
-  const dotPulse = useSharedValue(1);
-  const dotOpacity = useSharedValue(1);
+  // Live Radar Beacon Ripple Animation
+  const rippleScale = useSharedValue(1);
+  const rippleOpacity = useSharedValue(0.7);
 
   useEffect(() => {
-    dotPulse.value = withRepeat(
-      withSequence(
-        withTiming(1.4, { duration: 900 }),
-        withTiming(1, { duration: 900 })
-      ),
+    rippleScale.value = withRepeat(
+      withTiming(2.4, { duration: 1500 }),
       -1,
-      true
+      false
     );
-    dotOpacity.value = withRepeat(
-      withSequence(
-        withTiming(0.4, { duration: 900 }),
-        withTiming(1, { duration: 900 })
-      ),
+    rippleOpacity.value = withRepeat(
+      withTiming(0, { duration: 1500 }),
       -1,
-      true
+      false
     );
-  }, [dotPulse, dotOpacity]);
+  }, [rippleScale, rippleOpacity]);
 
-  const animatedDotStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: dotPulse.value }],
-    opacity: dotOpacity.value
+  const animatedRippleStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: rippleScale.value }],
+    opacity: rippleOpacity.value
   }));
 
   const isOnline = isDeviceOnline;
@@ -353,13 +347,16 @@ export default function HomeScreen() {
 
               <View style={styles.headerActionsGroup}>
                 <View style={[styles.networkStatusPill, isOnline ? styles.onlinePill : styles.offlinePill]}>
-                  <Animated.View
-                    style={[
-                      styles.networkDot,
-                      { backgroundColor: isOnline ? '#12B76A' : '#F79E1B', marginRight: 6 },
-                      animatedDotStyle
-                    ]}
-                  />
+                  <View style={styles.beaconContainer}>
+                    <Animated.View
+                      style={[
+                        styles.beaconRipple,
+                        { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' },
+                        animatedRippleStyle
+                      ]}
+                    />
+                    <View style={[styles.beaconCore, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
+                  </View>
                   <Text style={[styles.networkStatusText, { color: isOnline ? '#027A48' : '#B54708' }]}>
                     {isOnline ? 'Online' : 'Offline'}
                   </Text>
@@ -1593,11 +1590,25 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(247, 158, 27, 0.5)',
     shadowColor: '#F79E1B'
   },
-  networkDot: {
+  beaconContainer: {
+    width: 14,
+    height: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+    position: 'relative'
+  },
+  beaconRipple: {
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    opacity: 0.6
+  },
+  beaconCore: {
     width: 7,
     height: 7,
-    borderRadius: 3.5,
-    marginRight: 6
+    borderRadius: 3.5
   },
   networkStatusText: {
     fontSize: 12,
