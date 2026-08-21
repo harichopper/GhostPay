@@ -33,7 +33,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const {
     walletAddress,
-    wallets,
+    wallets = [],
     isConnected,
     demoMode,
     generateWalletAddress,
@@ -88,7 +88,6 @@ export default function ProfileScreen() {
     setLoading(true);
     try {
       const { address, mnemonic } = await generateWalletAddress();
-      await importWalletFromMnemonic(mnemonic, walletLabel || 'Main Wallet');
       setGeneratedMnemonic(mnemonic);
       setShowBackupModal(true);
     } catch (error) {
@@ -132,8 +131,17 @@ export default function ProfileScreen() {
     });
   };
 
-  const handleDoneBackup = () => {
+  const handleDoneBackup = async () => {
+    if (generatedMnemonic) {
+      await importWalletFromMnemonic(generatedMnemonic, walletLabel || 'Main Wallet');
+      Toast.show({
+        type: 'success',
+        text1: 'Wallet Created & Activated',
+        text2: 'Your new Algorand vault wallet is active.'
+      });
+    }
     setShowBackupModal(false);
+    setGeneratedMnemonic('');
   };
 
   useEffect(() => {

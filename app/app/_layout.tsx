@@ -15,7 +15,7 @@ import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { Component, ReactNode, ErrorInfo, useCallback, useEffect, useState } from 'react';
-import { AppState, AppStateStatus, Animated, Image, LogBox, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppState, AppStateStatus, Animated, Image, LogBox, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 LogBox.ignoreLogs([
   "It looks like you're running in react-native",
@@ -60,38 +60,68 @@ const toastConfig = {
   )
 };
 
-class GlobalErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+class GlobalErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; errorMessage?: string; stackTrace?: string }
+> {
   constructor(props: { children: ReactNode }) {
     super(props);
     this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error) {
+    return {
+      hasError: true,
+      errorMessage: error?.message || 'Unknown render exception'
+    };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('GhostPay Global Error Boundary:', error, errorInfo);
+    this.setState({
+      errorMessage: error?.message || String(error),
+      stackTrace: errorInfo?.componentStack || ''
+    });
   }
 
   render() {
     if (this.state.hasError) {
       return (
         <SafeAreaProvider>
-          <SafeAreaView style={{ flex: 1, backgroundColor: '#0B132B', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-            <Ionicons name="shield-checkmark-outline" size={60} color="#05DA93" style={{ marginBottom: 16 }} />
-            <Text style={{ color: '#FFFFFF', fontSize: 18, fontFamily: 'Orbitron_700Bold', marginBottom: 8, textAlign: 'center' }}>
-              GhostPay Vault Recovered
-            </Text>
-            <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: 13, textAlign: 'center', marginBottom: 24, lineHeight: 18 }}>
-              A temporary interface glitch occurred. Your funds and wallet keys remain 100% safe on-chain.
-            </Text>
-            <Pressable
-              style={{ backgroundColor: '#05DA93', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
-              onPress={() => this.setState({ hasError: false })}
-            >
-              <Text style={{ color: '#0B132B', fontSize: 14, fontWeight: '700' }}>Return to App</Text>
-            </Pressable>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#0B132B', padding: 20 }}>
+            <ScrollView contentContainerStyle={{ alignItems: 'center', justifyContent: 'center', minHeight: '100%' }}>
+              <Ionicons name="bug-outline" size={56} color="#05DA93" style={{ marginBottom: 12 }} />
+              <Text style={{ color: '#FFFFFF', fontSize: 18, fontFamily: 'Orbitron_700Bold', marginBottom: 6, textAlign: 'center' }}>
+                GhostPay Debug Shield
+              </Text>
+              <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: 12, textAlign: 'center', marginBottom: 16 }}>
+                Interface error caught safely. Wallet keys & funds are 100% secure.
+              </Text>
+
+              {/* Exact Error Details Box for Testing & Debugging */}
+              <View style={{ width: '100%', backgroundColor: '#172B3E', borderRadius: 12, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255, 255, 255, 0.1)' }}>
+                <Text style={{ color: '#F79E1B', fontSize: 12, fontWeight: '700', marginBottom: 6 }}>
+                  ERROR DIAGNOSTIC LOG:
+                </Text>
+                <Text style={{ color: '#FF6B6B', fontSize: 13, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace', marginBottom: 8 }}>
+                  {this.state.errorMessage || 'No message provided'}
+                </Text>
+                {Boolean(this.state.stackTrace) && (
+                  <ScrollView style={{ maxHeight: 120, backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 6 }}>
+                    <Text style={{ color: '#A0AEC0', fontSize: 10, fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' }}>
+                      {this.state.stackTrace}
+                    </Text>
+                  </ScrollView>
+                )}
+              </View>
+
+              <Pressable
+                style={{ backgroundColor: '#05DA93', paddingHorizontal: 28, paddingVertical: 12, borderRadius: 12 }}
+                onPress={() => this.setState({ hasError: false, errorMessage: undefined, stackTrace: undefined })}
+              >
+                <Text style={{ color: '#0B132B', fontSize: 14, fontWeight: '700' }}>Return to App</Text>
+              </Pressable>
+            </ScrollView>
           </SafeAreaView>
         </SafeAreaProvider>
       );
