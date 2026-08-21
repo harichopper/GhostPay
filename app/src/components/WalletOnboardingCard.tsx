@@ -29,6 +29,7 @@ export function WalletOnboardingCard() {
     try {
       setLoading(true);
       const generated = await generateWalletAddress();
+      await importWalletFromMnemonic(generated.mnemonic, walletLabel || 'Main Wallet');
       setCreatedMnemonic(generated.mnemonic);
       setShowMnemonicModal(true);
       Toast.show({

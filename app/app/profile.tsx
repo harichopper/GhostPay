@@ -90,6 +90,7 @@ export default function ProfileScreen() {
     setLoading(true);
     try {
       const { address, mnemonic } = await generateWalletAddress();
+      await importWalletFromMnemonic(mnemonic, walletLabel || 'Main Wallet');
       setGeneratedMnemonic(mnemonic);
       setShowBackupModal(true);
     } catch (error) {
