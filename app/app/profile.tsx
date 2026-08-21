@@ -22,7 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system';
-import QRCode from 'react-native-qrcode-svg';
+import { SafeQRCode } from '../src/components/SafeQRCode';
 import { useWalletStore } from '../src/store/walletStore';
 import { colors } from '../src/theme/colors';
 import { MnemonicBackupModal } from '../src/components/MnemonicBackupModal';
@@ -453,12 +453,11 @@ export default function ProfileScreen() {
                     {/* Center QR Code Display */}
                     <View style={styles.qrCodeWrapper}>
                       {walletAddress ? (
-                        <QRCode
+                        <SafeQRCode
                           value={walletAddress}
                           size={170}
                           color={colors.primaryDark}
                           backgroundColor="#FFFFFF"
-                          enableLinearGradient={false}
                         />
                       ) : (
                         <Ionicons name="qr-code" size={140} color={colors.primaryDark} />

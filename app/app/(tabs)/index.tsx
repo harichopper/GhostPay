@@ -30,7 +30,7 @@ import Animated, {
   ZoomIn
 } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
-import QRCode from 'react-native-qrcode-svg';
+import { SafeQRCode } from '../../src/components/SafeQRCode';
 import TransactionDetailModal from '../../src/components/TransactionDetailModal';
 import { MnemonicBackupModal } from '../../src/components/MnemonicBackupModal';
 import { useWalletStore } from '../../src/store/walletStore';
@@ -801,7 +801,7 @@ export default function HomeScreen() {
 
             {/* Real SVG QR Code */}
             <View style={styles.qrBox}>
-              <QRCode
+              <SafeQRCode
                 value={
                   walletAddress
                     ? `ghostpay://pay?address=${walletAddress}&phone=${encodeURIComponent(verifiedPhone || '')}`
@@ -810,7 +810,6 @@ export default function HomeScreen() {
                 size={160}
                 color={colors.primaryDark}
                 backgroundColor="#FFFFFF"
-                enableLinearGradient={false}
               />
             </View>
 
