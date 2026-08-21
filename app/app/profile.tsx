@@ -144,6 +144,16 @@ export default function ProfileScreen() {
     setGeneratedMnemonic('');
   };
 
+  const handleCancelBackup = () => {
+    setShowBackupModal(false);
+    setGeneratedMnemonic('');
+    Toast.show({
+      type: 'info',
+      text1: 'Creation Cancelled',
+      text2: 'Wallet creation was cancelled.'
+    });
+  };
+
   useEffect(() => {
     if (walletAddress && isOnline) {
       refreshBalance();
@@ -448,7 +458,7 @@ export default function ProfileScreen() {
                           size={170}
                           color={colors.primaryDark}
                           backgroundColor="#FFFFFF"
-                          getRef={(ref) => (qrRef.current = ref)}
+                          enableLinearGradient={false}
                         />
                       ) : (
                         <Ionicons name="qr-code" size={140} color={colors.primaryDark} />
@@ -563,6 +573,7 @@ export default function ProfileScreen() {
         mnemonic={generatedMnemonic}
         onCopy={handleCopyMnemonic}
         onDone={handleDoneBackup}
+        onCancel={handleCancelBackup}
       />
 
       {/* Mobile Identity Verification Modal */}

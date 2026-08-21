@@ -231,6 +231,16 @@ export default function HomeScreen() {
     setGeneratedMnemonic('');
   };
 
+  const handleCancelBackup = () => {
+    setShowBackupModal(false);
+    setGeneratedMnemonic('');
+    Toast.show({
+      type: 'info',
+      text1: 'Creation Cancelled',
+      text2: 'Wallet creation was cancelled.'
+    });
+  };
+
   useFocusEffect(
     useCallback(() => {
       if (walletAddress) {
@@ -800,6 +810,7 @@ export default function HomeScreen() {
                 size={160}
                 color={colors.primaryDark}
                 backgroundColor="#FFFFFF"
+                enableLinearGradient={false}
               />
             </View>
 
@@ -827,6 +838,7 @@ export default function HomeScreen() {
         mnemonic={generatedMnemonic}
         onCopy={handleCopyMnemonic}
         onDone={handleDoneBackup}
+        onCancel={handleCancelBackup}
       />
     </SafeAreaView>
   );

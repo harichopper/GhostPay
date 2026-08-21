@@ -34,8 +34,6 @@ export function MnemonicBackupModal({
     setErrorMessage(null);
     if (onCancel) {
       onCancel();
-    } else {
-      onDone();
     }
   };
 

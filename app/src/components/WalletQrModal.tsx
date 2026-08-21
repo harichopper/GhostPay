@@ -18,7 +18,7 @@ export function WalletQrModal({ visible, walletAddress, onClose }: WalletQrModal
 
           {walletAddress ? (
             <View style={styles.qrWrap}>
-              <QRCode value={walletAddress} size={210} backgroundColor='#FFFFFF' color='#111417' />
+              <QRCode value={walletAddress} size={210} backgroundColor='#FFFFFF' color='#111417' enableLinearGradient={false} />
             </View>
           ) : (
             <View style={styles.emptyWrap}>

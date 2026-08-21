@@ -92,6 +92,16 @@ export function WalletOnboardingCard() {
     setCreatedMnemonic('');
   };
 
+  const handleCancelBackup = () => {
+    setShowMnemonicModal(false);
+    setCreatedMnemonic('');
+    Toast.show({
+      type: 'info',
+      text1: 'Creation Cancelled',
+      text2: 'Wallet creation was cancelled.'
+    });
+  };
+
   return (
     <View style={styles.onboardingWrapper}>
       {/* Brand Header */}
@@ -224,6 +234,7 @@ export function WalletOnboardingCard() {
         mnemonic={createdMnemonic}
         onCopy={handleCopyMnemonic}
         onDone={handleDoneBackup}
+        onCancel={handleCancelBackup}
       />
     </View>
   );
