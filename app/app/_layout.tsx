@@ -14,7 +14,7 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
+import React, { Component, ReactNode, ErrorInfo, useCallback, useEffect, useState } from 'react';
 import { AppState, AppStateStatus, Animated, Image, LogBox, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 LogBox.ignoreLogs([
@@ -23,7 +23,7 @@ LogBox.ignoreLogs([
 ]);
 
 SplashScreen.preventAutoHideAsync().catch(() => { });
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import Toast, { ToastConfigParams } from 'react-native-toast-message';
 import { LockScreen } from '../src/components/security/LockScreen';
 import { useSecurityStore } from '../src/store/securityStore';
@@ -59,6 +59,47 @@ const toastConfig = {
     </View>
   )
 };
+
+class GlobalErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('GhostPay Global Error Boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <SafeAreaProvider>
+          <SafeAreaView style={{ flex: 1, backgroundColor: '#0B132B', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <Ionicons name="shield-checkmark-outline" size={60} color="#05DA93" style={{ marginBottom: 16 }} />
+            <Text style={{ color: '#FFFFFF', fontSize: 18, fontFamily: 'Orbitron_700Bold', marginBottom: 8, textAlign: 'center' }}>
+              GhostPay Vault Recovered
+            </Text>
+            <Text style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: 13, textAlign: 'center', marginBottom: 24, lineHeight: 18 }}>
+              A temporary interface glitch occurred. Your funds and wallet keys remain 100% safe on-chain.
+            </Text>
+            <Pressable
+              style={{ backgroundColor: '#05DA93', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 }}
+              onPress={() => this.setState({ hasError: false })}
+            >
+              <Text style={{ color: '#0B132B', fontSize: 14, fontWeight: '700' }}>Return to App</Text>
+            </Pressable>
+          </SafeAreaView>
+        </SafeAreaProvider>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 export default function RootLayout() {
   const router = useRouter();
@@ -290,41 +331,43 @@ export default function RootLayout() {
   }
 
   return (
-    <SafeAreaProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name='(tabs)' />
-        <Stack.Screen name='analytics' />
-        <Stack.Screen name='settings' />
-        <Stack.Screen name='profile' />
-        <Stack.Screen name='+not-found' />
-      </Stack>
-      <StatusBar style='light' />
-      {Platform.OS !== 'web' || isClientMounted ? <Toast config={toastConfig} /> : null}
+    <GlobalErrorBoundary>
+      <SafeAreaProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name='(tabs)' />
+          <Stack.Screen name='analytics' />
+          <Stack.Screen name='settings' />
+          <Stack.Screen name='profile' />
+          <Stack.Screen name='+not-found' />
+        </Stack>
+        <StatusBar style='light' />
+        {Platform.OS !== 'web' || isClientMounted ? <Toast config={toastConfig} /> : null}
 
-      {isAppLoading && (
-        <Animated.View
-          style={[splashStyles.fullScreenOverlay, { opacity: splashOpacity }]}
-          pointerEvents="none"
-        >
-          <StatusBar style="light" />
-          <Image
-            source={require('../assets/app_logo/ghostpay-logo-removebg.png')}
-            style={splashStyles.logoImage}
-            resizeMode="contain"
+        {isAppLoading && (
+          <Animated.View
+            style={[splashStyles.fullScreenOverlay, { opacity: splashOpacity }]}
+            pointerEvents="none"
+          >
+            <StatusBar style="light" />
+            <Image
+              source={require('../assets/app_logo/ghostpay-logo-removebg.png')}
+              style={splashStyles.logoImage}
+              resizeMode="contain"
+            />
+          </Animated.View>
+        )}
+        {isSecurityReady && isLocked && !isAppLoading ? (
+          <LockScreen
+            biometricEnabled={biometricEnabled}
+            biometricName={biometricName}
+            isAuthenticating={isAuthenticating}
+            errorMessage={securityError}
+            onPinComplete={handlePinComplete}
+            onBiometricPress={handleBiometricUnlock}
           />
-        </Animated.View>
-      )}
-      {isSecurityReady && isLocked && !isAppLoading ? (
-        <LockScreen
-          biometricEnabled={biometricEnabled}
-          biometricName={biometricName}
-          isAuthenticating={isAuthenticating}
-          errorMessage={securityError}
-          onPinComplete={handlePinComplete}
-          onBiometricPress={handleBiometricUnlock}
-        />
-      ) : null}
-    </SafeAreaProvider>
+        ) : null}
+      </SafeAreaProvider>
+    </GlobalErrorBoundary>
   );
 }
 

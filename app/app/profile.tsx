@@ -263,7 +263,6 @@ export default function ProfileScreen() {
   };
 
   const qrRef = useRef<any>(null);
-  const cardShotRef = useRef<any>(null);
 
   const handleShareWallet = async () => {
     if (!walletAddress) return;
@@ -311,13 +310,14 @@ export default function ProfileScreen() {
                   <View style={styles.profileCard}>
                     <View style={styles.avatarCircle}>
                       <Text style={styles.avatarInitial}>
-                        {userName
+                        {userName && userName.trim()
                           ? userName
-                            .split(' ')
-                            .map((n) => n[0])
+                            .trim()
+                            .split(/\s+/)
+                            .map((n) => (n[0] ? n[0] : ''))
                             .join('')
                             .substring(0, 2)
-                            .toUpperCase()
+                            .toUpperCase() || 'GP'
                           : 'GP'}
                       </Text>
                       <View style={[styles.activeDot, { backgroundColor: isOnline ? '#12B76A' : '#F79E1B' }]} />
