@@ -22,9 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
 import QRCode from 'react-native-qrcode-svg';
-import ViewShot from 'react-native-view-shot';
 import { useWalletStore } from '../src/store/walletStore';
 import { colors } from '../src/theme/colors';
 import { MnemonicBackupModal } from '../src/components/MnemonicBackupModal';
@@ -270,43 +268,17 @@ export default function ProfileScreen() {
   const handleShareWallet = async () => {
     if (!walletAddress) return;
 
-    const shareMessage = `GhostPay Algorand Wallet Address:\n${walletAddress}\n\nSend Zero-Data Vault payments securely.`;
-
-    const shareFallbackText = async () => {
+    try {
       await Share.share({
         title: 'GhostPay Algorand Wallet',
-        message: shareMessage
+        message: `GhostPay Algorand Wallet Address:\n${walletAddress}\n\nSend Zero-Data Vault payments securely.`
       });
-    };
-
-    try {
-      if (cardShotRef.current && typeof cardShotRef.current.capture === 'function') {
-        const imageUri = await cardShotRef.current.capture();
-
-        if (Platform.OS === 'web') {
-          await shareFallbackText();
-          return;
-        }
-
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(imageUri, {
-            mimeType: 'image/png',
-            dialogTitle: 'Share GhostPay Wallet Card',
-            UTI: 'public.png'
-          });
-          Toast.show({
-            type: 'success',
-            text1: 'GhostPay Card Shared',
-            text2: 'Branded QR card image and wallet address shared successfully.'
-          });
-        } else {
-          await shareFallbackText();
-        }
-      } else {
-        await shareFallbackText();
-      }
     } catch {
-      await shareFallbackText();
+      Toast.show({
+        type: 'error',
+        text1: 'Share Failed',
+        text2: 'Could not share wallet address.'
+      });
     }
   };
 
@@ -431,7 +403,7 @@ export default function ProfileScreen() {
                 </View>
 
                 {/* My Wallet QR Code Card (Placed below Primary Wallet Card) */}
-                <ViewShot ref={cardShotRef} options={{ format: 'png', quality: 1.0 }} style={{ width: '100%' }}>
+                <View style={{ width: '100%' }}>
                   <View style={styles.qrCardContainer}>
                     {/* GhostPay Branding Header (Stacked vertical like Index page) */}
                     <View style={styles.qrBrandHeaderWrapper}>
@@ -504,7 +476,7 @@ export default function ProfileScreen() {
                       </View>
                     </View>
                   </View>
-                </ViewShot>
+                </View>
               </>
             ) : (
               /* Onboarding Action Card Form Area if no Wallet */
