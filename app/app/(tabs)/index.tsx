@@ -30,7 +30,7 @@ import Animated, {
   ZoomIn
 } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
-import QRCode from 'react-native-qrcode-svg';
+import { SafeQRCode } from '../../src/components/SafeQRCode';
 import TransactionDetailModal from '../../src/components/TransactionDetailModal';
 import { MnemonicBackupModal } from '../../src/components/MnemonicBackupModal';
 import { useWalletStore } from '../../src/store/walletStore';
@@ -175,7 +175,6 @@ export default function HomeScreen() {
     setLoading(true);
     try {
       const { address, mnemonic } = await generateWalletAddress();
-      await importWalletFromMnemonic(mnemonic, walletLabel || 'Main Wallet');
       setGeneratedMnemonic(mnemonic);
       setShowBackupModal(true);
     } catch (error) {
@@ -219,8 +218,27 @@ export default function HomeScreen() {
     });
   };
 
-  const handleDoneBackup = () => {
+  const handleDoneBackup = async () => {
+    if (generatedMnemonic) {
+      await importWalletFromMnemonic(generatedMnemonic, walletLabel || 'Main Wallet');
+      Toast.show({
+        type: 'success',
+        text1: 'Wallet Created & Activated',
+        text2: 'Your new Algorand vault wallet is active.'
+      });
+    }
     setShowBackupModal(false);
+    setGeneratedMnemonic('');
+  };
+
+  const handleCancelBackup = () => {
+    setShowBackupModal(false);
+    setGeneratedMnemonic('');
+    Toast.show({
+      type: 'info',
+      text1: 'Creation Cancelled',
+      text2: 'Wallet creation was cancelled.'
+    });
   };
 
   useFocusEffect(
@@ -783,7 +801,7 @@ export default function HomeScreen() {
 
             {/* Real SVG QR Code */}
             <View style={styles.qrBox}>
-              <QRCode
+              <SafeQRCode
                 value={
                   walletAddress
                     ? `ghostpay://pay?address=${walletAddress}&phone=${encodeURIComponent(verifiedPhone || '')}`
@@ -819,6 +837,7 @@ export default function HomeScreen() {
         mnemonic={generatedMnemonic}
         onCopy={handleCopyMnemonic}
         onDone={handleDoneBackup}
+        onCancel={handleCancelBackup}
       />
     </SafeAreaView>
   );

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
+import { SafeQRCode } from './SafeQRCode';
 
 type WalletQrModalProps = {
   visible: boolean;
@@ -18,7 +18,7 @@ export function WalletQrModal({ visible, walletAddress, onClose }: WalletQrModal
 
           {walletAddress ? (
             <View style={styles.qrWrap}>
-              <QRCode value={walletAddress} size={210} backgroundColor='#FFFFFF' color='#111417' />
+              <SafeQRCode value={walletAddress} size={210} backgroundColor='#FFFFFF' color='#111417' />
             </View>
           ) : (
             <View style={styles.emptyWrap}>

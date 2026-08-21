@@ -29,14 +29,8 @@ export function WalletOnboardingCard() {
     try {
       setLoading(true);
       const generated = await generateWalletAddress();
-      await importWalletFromMnemonic(generated.mnemonic, walletLabel || 'Main Wallet');
       setCreatedMnemonic(generated.mnemonic);
       setShowMnemonicModal(true);
-      Toast.show({
-        type: 'success',
-        text1: 'Wallet Created',
-        text2: 'Save your mnemonic phrase now.'
-      });
     } catch {
       Toast.show({
         type: 'error',
@@ -82,6 +76,29 @@ export function WalletOnboardingCard() {
       type: 'success',
       text1: 'Copied to Clipboard',
       text2: 'Store your 25 words in a safe offline location.'
+    });
+  };
+
+  const handleDoneBackup = async () => {
+    if (createdMnemonic) {
+      await importWalletFromMnemonic(createdMnemonic, walletLabel || 'Main Wallet');
+      Toast.show({
+        type: 'success',
+        text1: 'Wallet Activated',
+        text2: 'Your new wallet is active.'
+      });
+    }
+    setShowMnemonicModal(false);
+    setCreatedMnemonic('');
+  };
+
+  const handleCancelBackup = () => {
+    setShowMnemonicModal(false);
+    setCreatedMnemonic('');
+    Toast.show({
+      type: 'info',
+      text1: 'Creation Cancelled',
+      text2: 'Wallet creation was cancelled.'
     });
   };
 
@@ -216,7 +233,8 @@ export function WalletOnboardingCard() {
         visible={showMnemonicModal}
         mnemonic={createdMnemonic}
         onCopy={handleCopyMnemonic}
-        onDone={() => setShowMnemonicModal(false)}
+        onDone={handleDoneBackup}
+        onCancel={handleCancelBackup}
       />
     </View>
   );

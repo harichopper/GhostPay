@@ -22,7 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system';
-import QRCode from 'react-native-qrcode-svg';
+import { SafeQRCode } from '../src/components/SafeQRCode';
 import { useWalletStore } from '../src/store/walletStore';
 import { colors } from '../src/theme/colors';
 import { MnemonicBackupModal } from '../src/components/MnemonicBackupModal';
@@ -33,7 +33,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const {
     walletAddress,
-    wallets,
+    wallets = [],
     isConnected,
     demoMode,
     generateWalletAddress,
@@ -88,7 +88,6 @@ export default function ProfileScreen() {
     setLoading(true);
     try {
       const { address, mnemonic } = await generateWalletAddress();
-      await importWalletFromMnemonic(mnemonic, walletLabel || 'Main Wallet');
       setGeneratedMnemonic(mnemonic);
       setShowBackupModal(true);
     } catch (error) {
@@ -132,8 +131,27 @@ export default function ProfileScreen() {
     });
   };
 
-  const handleDoneBackup = () => {
+  const handleDoneBackup = async () => {
+    if (generatedMnemonic) {
+      await importWalletFromMnemonic(generatedMnemonic, walletLabel || 'Main Wallet');
+      Toast.show({
+        type: 'success',
+        text1: 'Wallet Created & Activated',
+        text2: 'Your new Algorand vault wallet is active.'
+      });
+    }
     setShowBackupModal(false);
+    setGeneratedMnemonic('');
+  };
+
+  const handleCancelBackup = () => {
+    setShowBackupModal(false);
+    setGeneratedMnemonic('');
+    Toast.show({
+      type: 'info',
+      text1: 'Creation Cancelled',
+      text2: 'Wallet creation was cancelled.'
+    });
   };
 
   useEffect(() => {
@@ -435,12 +453,11 @@ export default function ProfileScreen() {
                     {/* Center QR Code Display */}
                     <View style={styles.qrCodeWrapper}>
                       {walletAddress ? (
-                        <QRCode
+                        <SafeQRCode
                           value={walletAddress}
                           size={170}
                           color={colors.primaryDark}
                           backgroundColor="#FFFFFF"
-                          getRef={(ref) => (qrRef.current = ref)}
                         />
                       ) : (
                         <Ionicons name="qr-code" size={140} color={colors.primaryDark} />
@@ -555,6 +572,7 @@ export default function ProfileScreen() {
         mnemonic={generatedMnemonic}
         onCopy={handleCopyMnemonic}
         onDone={handleDoneBackup}
+        onCancel={handleCancelBackup}
       />
 
       {/* Mobile Identity Verification Modal */}
