@@ -1,3 +1,4 @@
+import algosdk from 'algosdk';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -66,14 +67,68 @@ export function parsePaymentQr(qrData: string) {
     if (params.has('amount')) amount = params.get('amount') || '';
   } else if (/^[A-Z2-7]{58}$/i.test(cleanData)) {
     address = cleanData;
-  } else if (cleanData.replace(/\D/g, '').length >= 8) {
+  } else if (cleanData.replace(/\D/g, '').length >= 8 && cleanData.length < 50) {
     phone = cleanData;
-  } else {
-    address = cleanData;
   }
 
   return { address, phone, amount, note };
 }
+
+const isPhoneLike = (value: string) => {
+  const cleaned = value.trim();
+  return cleaned.length > 0 && cleaned.replace(/\D/g, '').length >= 8 && cleaned.length < 50 && !cleaned.startsWith('0x');
+};
+
+const isValidAlgorandAddress = (value: string) => {
+  const cleaned = value.trim();
+  return Boolean(cleaned) && algosdk.isValidAddress(cleaned);
+};
+
+const resolveSupportedPhoneAddress = async (phone: string): Promise<string | null> => {
+  const cleanPhone = phone.trim();
+  if (!isPhoneLike(cleanPhone)) return null;
+
+  try {
+    const res = await lookupWalletsByMobile(cleanPhone);
+    if (res && res.verified && Array.isArray(res.wallets) && res.wallets.length > 0) {
+      const primary = res.wallets.find((wallet) => wallet.isDefault) || res.wallets[0];
+      const candidate = primary?.address?.trim();
+      if (candidate && isValidAlgorandAddress(candidate)) {
+        return candidate;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
+const isUnsupportedQrPayload = (rawData: string) => {
+  const value = rawData.trim();
+  if (!value) return true;
+  const lower = value.toLowerCase();
+
+  if (value.startsWith('algorand://') || value.startsWith('ghostpay://')) {
+    return false;
+  }
+
+  if (
+    lower.includes('google pay') ||
+    lower.includes('gpay') ||
+    lower.includes('upi') ||
+    lower.includes('phonepe') ||
+    lower.includes('paytm') ||
+    lower.startsWith('bitcoin:') ||
+    lower.startsWith('ethereum:') ||
+    lower.startsWith('solana:') ||
+    lower.startsWith('matic:') ||
+    lower.startsWith('eth:')
+  ) {
+    return true;
+  }
+
+  return !isValidAlgorandAddress(value) && !isPhoneLike(value);
+};
 
 const AVATAR_COLORS = ['#4A3E3D', '#3B4B5B', '#2C3E50', '#6C5CE7', '#027A48', '#B54708', '#7F56D9'];
 
@@ -266,10 +321,33 @@ export default function SendScreen() {
   };
 
   const handleBarCodeScanned = async ({ data }: { data: string }) => {
-    if (data) {
-      const parsed = parsePaymentQr(data);
-      const targetRecipient = parsed.address || parsed.phone || data;
-      setRecipient(targetRecipient);
+    if (!data) return;
+
+    if (isUnsupportedQrPayload(data)) {
+      setErrorModalMessage('Unsupported QR Code — GhostPay currently supports Algorand/GhostPay payment QR codes only');
+      return;
+    }
+
+    const parsed = parsePaymentQr(data);
+
+    if (parsed.address && !isValidAlgorandAddress(parsed.address)) {
+      setErrorModalMessage('Invalid Algorand wallet address');
+      return;
+    }
+
+    if (parsed.phone) {
+      const resolvedAddress = await resolveSupportedPhoneAddress(parsed.phone);
+      if (!resolvedAddress) {
+        setErrorModalMessage('This phone number is not linked to a supported Algorand wallet');
+        return;
+      }
+
+      setRecipient(parsed.phone);
+      setRecipientIdentity({
+        name: 'Verified Vault Member',
+        verified: true,
+        primaryAddress: resolvedAddress
+      });
       if (parsed.amount) {
         setAmount(parsed.amount);
       }
@@ -277,10 +355,27 @@ export default function SendScreen() {
       Toast.show({
         type: 'success',
         text1: 'QR Code Scanned',
-        text2: `Target: ${targetRecipient.slice(0, 16)}...`
+        text2: `Target: ${resolvedAddress.slice(0, 16)}...`
       });
-      await resolveRecipientIdentity(targetRecipient);
+      return;
     }
+
+    if (!parsed.address) {
+      setErrorModalMessage('Unsupported QR Code — GhostPay currently supports Algorand/GhostPay payment QR codes only');
+      return;
+    }
+
+    setRecipient(parsed.address);
+    if (parsed.amount) {
+      setAmount(parsed.amount);
+    }
+    setActiveTab('send');
+    Toast.show({
+      type: 'success',
+      text1: 'QR Code Scanned',
+      text2: `Target: ${parsed.address.slice(0, 16)}...`
+    });
+    await resolveRecipientIdentity(parsed.address);
   };
 
   const handlePasteAddress = async () => {
@@ -309,7 +404,8 @@ export default function SendScreen() {
   const handleSendPayment = async () => {
     if (isSubmitting) return;
 
-    if (!recipient.trim()) {
+    const trimmedRecipient = recipient.trim();
+    if (!trimmedRecipient) {
       setErrorModalMessage('Please enter a mobile number or wallet address.');
       return;
     }
@@ -320,6 +416,35 @@ export default function SendScreen() {
       return;
     }
 
+    let targetAddress = recipientIdentity?.primaryAddress?.trim() || trimmedRecipient;
+
+    if (isPhoneLike(trimmedRecipient)) {
+      const resolvedPhoneAddress = await resolveSupportedPhoneAddress(trimmedRecipient);
+      if (!resolvedPhoneAddress) {
+        setErrorModalMessage('This phone number is not linked to a supported Algorand wallet');
+        return;
+      }
+      targetAddress = resolvedPhoneAddress;
+      setRecipientIdentity((prev) => ({
+        name: prev?.name || 'Verified Vault Member',
+        verified: true,
+        primaryAddress: resolvedPhoneAddress
+      }));
+    } else if (!isValidAlgorandAddress(trimmedRecipient)) {
+      setErrorModalMessage('Invalid Algorand wallet address');
+      return;
+    }
+
+    if (!isValidAlgorandAddress(targetAddress)) {
+      setErrorModalMessage('Invalid Algorand wallet address');
+      return;
+    }
+
+    if (targetAddress === walletAddress) {
+      setErrorModalMessage('You cannot send a payment to your own wallet');
+      return;
+    }
+
     const currentCurrency = displayCurrency || 'USD';
     const rate = algoRates?.[currentCurrency] || (currentCurrency === 'INR' ? 15.25 : currentCurrency === 'EUR' ? 0.165 : 0.18);
     const numericAmount = currencyMode === 'FIAT' ? inputAmount / rate : inputAmount;
@@ -327,7 +452,6 @@ export default function SendScreen() {
     setIsSubmitting(true);
 
     try {
-      const targetAddress = recipientIdentity?.primaryAddress || recipient.trim();
       const X402_MERCHANT_VAULT = 'EI5WNOWDB2S5MOHNVZXNVUULCKBMUG4BC5AZUAL2S5T2PZ5DW2FCF4KYCA';
 
       // Step 1: Execute On-Chain 0.005 ALGO x402 Micro-Payment Transfer
