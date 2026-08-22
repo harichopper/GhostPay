@@ -10,17 +10,28 @@ import {
 import { Orbitron_700Bold } from '@expo-google-fonts/orbitron';
 import { Rajdhani_500Medium, Rajdhani_600SemiBold, Rajdhani_700Bold } from '@expo-google-fonts/rajdhani';
 import NetInfo from '@react-native-community/netinfo';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { Component, ReactNode, ErrorInfo, useCallback, useEffect, useState } from 'react';
+import React, { Component, ReactNode, ErrorInfo, useCallback, useEffect, useState, useRef } from 'react';
 import { AppState, AppStateStatus, Animated, Image, LogBox, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 LogBox.ignoreLogs([
   "It looks like you're running in react-native",
   "In order to perform common crypto operations you will need to polyfill"
 ]);
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false
+  })
+});
 
 SplashScreen.preventAutoHideAsync().catch(() => { });
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -140,6 +151,10 @@ export default function RootLayout() {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [securityError, setSecurityError] = useState<string | undefined>();
   const [biometricName, setBiometricName] = useState('Biometric');
+  const [expoPushToken, setExpoPushToken] = useState('');
+  const [notification, setNotification] = useState<Notifications.Notification | null>(null);
+  const notificationListener = useRef<Notifications.Subscription>();
+  const responseListener = useRef<Notifications.Subscription>();
 
   const [fontsLoaded] = useFonts({
     Orbitron_700Bold,
@@ -186,12 +201,11 @@ export default function RootLayout() {
     return () => clearInterval(timer);
   }, []);
 
-  // Global NetInfo Auto-Broadcaster listener
+  // Global Consolidated NetInfo & AppState Auto-Sync listener
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      const isOnline = Boolean(state.isConnected && state.isInternetReachable !== false);
-
-      if (isOnline) {
+    const checkAndSync = async (isConnectedState: boolean) => {
+      setConnectionStatus(isConnectedState);
+      if (isConnectedState) {
         const store = useWalletStore.getState();
         const pendingCount = (store.transactions || []).filter(
           (tx) => tx.status === 'pending' || tx.status === 'syncing'
@@ -206,13 +220,53 @@ export default function RootLayout() {
           void store.syncPendingTransactions();
         }
       }
+    };
+
+    const unsubscribeNetInfo = NetInfo.addEventListener((state) => {
+      const isOnline = Boolean(state.isConnected && state.isInternetReachable !== false);
+      void checkAndSync(isOnline);
     });
 
-    return () => unsubscribe();
-  }, []);
+    const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        const netState = await NetInfo.fetch();
+        const isOnline = Boolean(netState.isConnected && netState.isInternetReachable !== false);
+        void checkAndSync(isOnline);
+      }
+    };
+    const unsubscribeAppState = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      unsubscribeNetInfo();
+      unsubscribeAppState.remove();
+    };
+  }, [setConnectionStatus, syncPendingTransactions]);
 
   useEffect(() => {
     setIsClientMounted(true);
+  }, []);
+
+  useEffect(() => {
+    registerForPushNotificationsAsync().then((token) => {
+      if (token) setExpoPushToken(token);
+    });
+
+    notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
+      setNotification(notification);
+    });
+
+    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+      console.log('Notification interaction response:', response);
+    });
+
+    return () => {
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(notificationListener.current);
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
+    };
   }, []);
 
 
@@ -327,25 +381,7 @@ export default function RootLayout() {
     }
   }, [unlock]);
 
-  useEffect(() => {
-    const subscription = NetInfo.addEventListener((state) => {
-      const online = Boolean(state.isConnected && state.isInternetReachable !== false);
-      setConnectionStatus(online);
-      if (online) {
-        void syncPendingTransactions();
-      }
-    });
 
-    void NetInfo.fetch().then((state) => {
-      const online = Boolean(state.isConnected && state.isInternetReachable !== false);
-      setConnectionStatus(online);
-      if (online) {
-        void syncPendingTransactions();
-      }
-    });
-
-    return () => subscription();
-  }, [setConnectionStatus, syncPendingTransactions]);
 
   if (!fontsLoaded) {
     return (
@@ -399,6 +435,42 @@ export default function RootLayout() {
       </SafeAreaProvider>
     </GlobalErrorBoundary>
   );
+}
+
+async function registerForPushNotificationsAsync() {
+  let token;
+  if (Platform.OS === 'android') {
+    await Notifications.setNotificationChannelAsync('default', {
+      name: 'default',
+      importance: Notifications.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#FF231F71',
+    });
+  }
+
+  if (Device.isDevice) {
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') {
+      console.warn('Failed to get push token for push notification!');
+      return;
+    }
+    try {
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
+      token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+      console.log('Expo Push Token Registered:', token);
+    } catch (error) {
+      console.warn('Error fetching expo push token:', error);
+    }
+  } else {
+    console.log('Must use physical device for Push Notifications');
+  }
+
+  return token;
 }
 
 const toastStyles = StyleSheet.create({
