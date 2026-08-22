@@ -84,7 +84,10 @@ const isValidAlgorandAddress = (value: string) => {
   return Boolean(cleaned) && algosdk.isValidAddress(cleaned);
 };
 
-const resolveSupportedPhoneAddress = async (phone: string): Promise<string | null> => {
+const resolveSupportedPhoneAddress = async (
+  phone: string,
+  dynamicContacts?: Array<{ phone: string }>
+): Promise<string | null> => {
   const cleanPhone = phone.trim();
   if (!isPhoneLike(cleanPhone)) return null;
 
@@ -97,10 +100,20 @@ const resolveSupportedPhoneAddress = async (phone: string): Promise<string | nul
         return candidate;
       }
     }
-    return null;
   } catch {
-    return null;
+    // Network offline — check local contacts fallback
   }
+
+  if (dynamicContacts && dynamicContacts.length > 0) {
+    const match = dynamicContacts.find(
+      (c) => c.phone.replace(/\D/g, '') === cleanPhone.replace(/\D/g, '')
+    );
+    if (match && match.phone && isValidAlgorandAddress(match.phone)) {
+      return match.phone;
+    }
+  }
+
+  return null;
 };
 
 const isUnsupportedQrPayload = (rawData: string) => {
@@ -163,7 +176,7 @@ function getDynamicRecentContacts(transactions: GhostTransaction[], currentWalle
 
 export default function SendScreen() {
   const router = useRouter();
-  const { walletAddress, balanceAlgo, enqueueOfflinePayment, isConnected, transactions, displayCurrency, algoRates } = useWalletStore();
+  const { walletAddress, balanceAlgo, enqueueOfflinePayment, isConnected, demoMode, transactions, displayCurrency, algoRates } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
 
@@ -336,7 +349,7 @@ export default function SendScreen() {
     }
 
     if (parsed.phone) {
-      const resolvedAddress = await resolveSupportedPhoneAddress(parsed.phone);
+      const resolvedAddress = await resolveSupportedPhoneAddress(parsed.phone, dynamicRecentContacts);
       if (!resolvedAddress) {
         setErrorModalMessage('This phone number is not linked to a supported Algorand wallet');
         return;
@@ -419,7 +432,7 @@ export default function SendScreen() {
     let targetAddress = recipientIdentity?.primaryAddress?.trim() || trimmedRecipient;
 
     if (isPhoneLike(trimmedRecipient)) {
-      const resolvedPhoneAddress = await resolveSupportedPhoneAddress(trimmedRecipient);
+      const resolvedPhoneAddress = await resolveSupportedPhoneAddress(trimmedRecipient, dynamicRecentContacts);
       if (!resolvedPhoneAddress) {
         setErrorModalMessage('This phone number is not linked to a supported Algorand wallet');
         return;
@@ -452,9 +465,26 @@ export default function SendScreen() {
     setIsSubmitting(true);
 
     try {
+      const isEffectiveOnline = isConnected && !demoMode.simulateOffline;
+
+      if (!isEffectiveOnline) {
+        // OFFLINE MODE: Bypass remote x402 HTTP calls and stage payment directly in local queue
+        setProcessingStatus('Staging payment in offline queue...');
+        await enqueueOfflinePayment(targetAddress, numericAmount);
+
+        Toast.show({
+          type: 'success',
+          text1: 'Payment Queued Offline',
+          text2: `${numericAmount.toFixed(2)} ALGO saved locally — will auto-sync when online`
+        });
+        setAmount('');
+        setRecipient('');
+        return;
+      }
+
       const X402_MERCHANT_VAULT = 'EI5WNOWDB2S5MOHNVZXNVUULCKBMUG4BC5AZUAL2S5T2PZ5DW2FCF4KYCA';
 
-      // Step 1: Execute On-Chain 0.005 ALGO x402 Micro-Payment Transfer
+      // ONLINE MODE: Step 1: Execute On-Chain 0.005 ALGO x402 Micro-Payment Transfer
       setProcessingStatus('x402 Micro-Fee: Deducting 0.005 ALGO...');
       await enqueueOfflinePayment(X402_MERCHANT_VAULT, 0.005);
 
@@ -487,8 +517,8 @@ export default function SendScreen() {
 
       Toast.show({
         type: 'success',
-        text1: isConnected ? 'Payment Confirmed!' : 'Payment Queued Offline',
-        text2: `${numericAmount} ${currencyMode} sent with 3x x402 AI Protection`
+        text1: 'Payment Confirmed!',
+        text2: `${numericAmount.toFixed(2)} ALGO sent with 3x x402 AI Protection`
       });
       setAmount('');
       setRecipient('');

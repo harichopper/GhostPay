@@ -627,7 +627,7 @@ export default function HomeScreen() {
                         <View style={styles.txDetails}>
                           <Text style={styles.txName}>{isPaid ? `To ${displayName}` : `From ${displayName}`}</Text>
                           <Text style={styles.txType}>
-                            {tx.status === 'confirmed' ? 'Confirmed' : 'Pending Sync'} • {formattedTime}
+                            {tx.status === 'confirmed' ? 'Confirmed' : tx.status === 'syncing' ? 'Syncing...' : tx.status === 'failed' ? 'Failed' : 'Queued (Offline)'} • {formattedTime}
                           </Text>
                         </View>
                         <View style={{ alignItems: 'flex-end' }}>

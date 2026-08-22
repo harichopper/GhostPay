@@ -101,6 +101,7 @@ type WalletState = {
   toggleDemoSyncSuccess: () => void;
   enqueueOfflinePayment: (receiver: string, amount: number) => Promise<GhostTransaction>;
   syncPendingTransactions: () => Promise<void>;
+  retryFailedTransaction: (txId: string) => void;
   refreshBalance: () => Promise<void>;
 };
 
@@ -445,8 +446,10 @@ export const useWalletStore = create<WalletState>()(
       },
 
       syncPendingTransactions: async () => {
-        // Ensure simulation mode is turned off so sync proceeds
-        set((s) => ({ demoMode: { ...s.demoMode, simulateOffline: false } }));
+        const isOnline = get().isConnected && !get().demoMode.simulateOffline;
+        if (!isOnline) {
+          return;
+        }
 
         const pending = get().transactions.filter(
           (tx) => tx.status === 'pending' || tx.status === 'syncing'
@@ -502,15 +505,39 @@ export const useWalletStore = create<WalletState>()(
               network = response.network;
               contractVerified = Boolean(response.contractVerified);
             } catch (err: any) {
+              const errMsg = err?.message || '';
+              const isNetworkError =
+                !get().isConnected ||
+                get().demoMode.simulateOffline ||
+                errMsg.toLowerCase().includes('fetch') ||
+                errMsg.toLowerCase().includes('network') ||
+                errMsg.toLowerCase().includes('connection') ||
+                errMsg.toLowerCase().includes('failed to fetch') ||
+                errMsg.toLowerCase().includes('503') ||
+                errMsg.toLowerCase().includes('502') ||
+                errMsg.toLowerCase().includes('timeout') ||
+                errMsg.toLowerCase().includes('http status 5');
+
+              if (isNetworkError) {
+                // Revert to pending so it stays queued and auto-syncs when network is back
+                set((current) => ({
+                  transactions: withUpdatedTransaction(current.transactions, tx.id, {
+                    status: 'pending',
+                    error: 'Queued (Offline) — Will auto-sync when online'
+                  })
+                }));
+                continue;
+              }
+
               set((current) => ({
                 transactions: withUpdatedTransaction(current.transactions, tx.id, {
                   status: 'failed',
-                  error: err?.message || 'Broadcast failed on Algorand network'
+                  error: errMsg || 'Broadcast failed on Algorand network'
                 })
               }));
               void triggerLocalNotification(
                 'Payment Sync Failed',
-                `Payment of ${tx.amount} ALGO failed to sync: ${err?.message || 'Broadcast failed'}`
+                `Payment of ${tx.amount} ALGO failed to sync: ${errMsg || 'Broadcast failed'}`
               );
               continue;
             }
@@ -532,19 +559,25 @@ export const useWalletStore = create<WalletState>()(
           } catch {
             set((current) => ({
               transactions: withUpdatedTransaction(current.transactions, tx.id, {
-                status: 'confirmed',
-                txHash: `GHOST-${Date.now()}`
+                status: 'pending',
+                error: 'Queued — Will retry automatically'
               })
             }));
-            void triggerLocalNotification(
-              'Payment Confirmed (Simulated)',
-              `Your payment of ${tx.amount} ALGO has been confirmed (simulated offline bypass).`
-            );
           }
         }
 
         set({ isSyncing: false });
         void get().refreshBalance();
+      },
+
+      retryFailedTransaction: (txId: string) => {
+        set((current) => ({
+          transactions: withUpdatedTransaction(current.transactions, txId, {
+            status: 'pending',
+            error: undefined
+          })
+        }));
+        void get().syncPendingTransactions();
       },
 
       refreshBalance: async () => {

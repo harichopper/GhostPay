@@ -183,7 +183,14 @@ export default function TransactionsScreen() {
         const formattedTime = isNaN(txDate.getTime())
           ? 'Recently'
           : txDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        const statusText = tx.status === 'confirmed' ? 'Confirmed' : 'Pending Sync';
+        const statusText =
+          tx.status === 'confirmed'
+            ? 'Confirmed'
+            : tx.status === 'syncing'
+            ? 'Syncing...'
+            : tx.status === 'failed'
+            ? 'Failed'
+            : 'Queued (Offline)';
 
         const currentCurrency = displayCurrency || 'USD';
         const rate = algoRates?.[currentCurrency] || (currentCurrency === 'INR' ? 15.25 : currentCurrency === 'EUR' ? 0.165 : 0.18);
