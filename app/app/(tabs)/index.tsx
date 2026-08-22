@@ -107,7 +107,9 @@ export default function HomeScreen() {
     algoRates,
     userName,
     verifiedPhone,
-    notificationsClearedAt
+    notificationsClearedAt,
+    readTxIds,
+    markTxAsRead
   } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
@@ -136,7 +138,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     rippleScale.value = withRepeat(
-      withTiming(2.4, { duration: 1500 }),
+      withTiming(1.35, { duration: 1500 }),
       -1,
       false
     );
@@ -154,14 +156,20 @@ export default function HomeScreen() {
 
   const isOnline = isDeviceOnline;
 
-  const hasUnreadNotif = useMemo(() => {
-    if (!transactions || transactions.length === 0) return false;
+  const unreadNotifCount = useMemo(() => {
+    if (!transactions || transactions.length === 0) return 0;
     const clearedTime = notificationsClearedAt ? new Date(notificationsClearedAt).getTime() : 0;
-    return transactions.some((t) => {
-      const txTime = t.timestamp ? new Date(t.timestamp).getTime() : Date.now();
-      return t.status === 'pending' || txTime > clearedTime;
-    });
-  }, [transactions, notificationsClearedAt]);
+    return transactions.filter((t) => {
+      const isPaid = t.sender?.toLowerCase() === (walletAddress || '').toLowerCase();
+      if (isPaid) return false;
+      if (readTxIds.includes(t.id)) return false;
+      if (clearedTime && t.timestamp) {
+        const txTime = new Date(t.timestamp).getTime();
+        if (!isNaN(txTime) && txTime <= clearedTime) return false;
+      }
+      return true;
+    }).length;
+  }, [transactions, walletAddress, notificationsClearedAt, readTxIds]);
 
   // Onboarding local state if wallet is not connected
   const [loading, setLoading] = useState(false);
@@ -280,6 +288,9 @@ export default function HomeScreen() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleOpenTxDetail = (tx: GhostTransaction) => {
+    if (tx?.id) {
+      markTxAsRead(tx.id);
+    }
     setSelectedTx(tx);
     setIsModalOpen(true);
   };
@@ -386,7 +397,13 @@ export default function HomeScreen() {
                   onPress={() => router.push('/notification')}
                 >
                   <Ionicons name="notifications-outline" size={20} color={colors.primaryDark} />
-                  {hasUnreadNotif && <View style={styles.notifBadge} />}
+                  {unreadNotifCount > 0 && (
+                    <View style={styles.notifBadgeCount}>
+                      <Text style={styles.notifBadgeCountText}>
+                        {unreadNotifCount > 99 ? '99+' : unreadNotifCount}
+                      </Text>
+                    </View>
+                  )}
                 </Pressable>
               </View>
             </>
@@ -611,15 +628,37 @@ export default function HomeScreen() {
                     const currencySymbol = currentCurrency === 'INR' ? '₹' : currentCurrency === 'EUR' ? '€' : '$';
                     const fiatVal = (tx.amount * rate).toFixed(2);
 
+                    const statusBgColor =
+                      tx.status === 'pending'
+                        ? '#F79E1B'
+                        : tx.status === 'syncing'
+                          ? '#2E90FA'
+                          : tx.status === 'failed'
+                            ? '#F04438'
+                            : isPaid
+                              ? '#172B3E'
+                              : '#05DA93';
+
+                    const statusIconName: keyof typeof Ionicons.glyphMap =
+                      tx.status === 'pending'
+                        ? 'time'
+                        : tx.status === 'syncing'
+                          ? 'sync'
+                          : tx.status === 'failed'
+                            ? 'alert-circle'
+                            : isPaid
+                              ? 'arrow-up-circle'
+                              : 'arrow-down-circle';
+
                     return (
                       <Pressable
                         key={tx.id}
                         style={styles.txCard}
                         onPress={() => handleOpenTxDetail(tx)}
                       >
-                        <View style={[styles.avatarContainer, { backgroundColor: isPaid ? '#172B3E' : '#05DA93' }]}>
+                        <View style={[styles.avatarContainer, { backgroundColor: statusBgColor }]}>
                           <Ionicons
-                            name={isPaid ? 'arrow-up-circle' : 'arrow-down-circle'}
+                            name={statusIconName}
                             size={22}
                             color={colors.white}
                           />
@@ -944,21 +983,31 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     position: 'relative'
   },
-  notifBadge: {
+  notifBadgeCount: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 9,
-    height: 9,
-    borderRadius: 4.5,
+    top: -3,
+    right: -3,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
     backgroundColor: '#F04438',
-    borderWidth: 1.5,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
     borderColor: '#FFFFFF',
-    elevation: 3,
+    elevation: 4,
     shadowColor: '#F04438',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.6,
-    shadowRadius: 3
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 5
+  },
+  notifBadgeCountText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontFamily: 'Inter_700Bold',
+    lineHeight: 12,
+    textAlign: 'center'
   },
   scrollContent: {
     paddingHorizontal: 20,

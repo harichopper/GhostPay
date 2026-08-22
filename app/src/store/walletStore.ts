@@ -87,6 +87,8 @@ type WalletState = {
   algoRates: { USD: number; INR: number; EUR: number };
   notificationsClearedAt: string | null;
   setNotificationsClearedAt: (date: string | null) => void;
+  readTxIds: string[];
+  markTxAsRead: (txId: string) => void;
   fetchExchangeRates: () => Promise<void>;
   hydrateSampleData: () => void;
   loadNetworkInfo: () => Promise<boolean>;
@@ -209,6 +211,14 @@ export const useWalletStore = create<WalletState>()(
       setDisplayCurrency: (currency) => set({ displayCurrency: currency }),
       notificationsClearedAt: null,
       setNotificationsClearedAt: (date) => set({ notificationsClearedAt: date }),
+      readTxIds: [],
+      markTxAsRead: (txId) => {
+        if (!txId) return;
+        set((state) => {
+          if (state.readTxIds.includes(txId)) return state;
+          return { readTxIds: [...state.readTxIds, txId] };
+        });
+      },
       algoRates: { USD: 0.15, INR: 12.5, EUR: 0.14 },
       fetchExchangeRates: async () => {
         try {
@@ -661,7 +671,8 @@ export const useWalletStore = create<WalletState>()(
         verifiedPhone: state.verifiedPhone,
         userName: state.userName,
         displayCurrency: state.displayCurrency,
-        notificationsClearedAt: state.notificationsClearedAt
+        notificationsClearedAt: state.notificationsClearedAt,
+        readTxIds: state.readTxIds
       })
     }
   )

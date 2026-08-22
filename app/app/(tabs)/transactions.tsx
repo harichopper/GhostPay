@@ -187,15 +187,36 @@ export default function TransactionsScreen() {
           tx.status === 'confirmed'
             ? 'Confirmed'
             : tx.status === 'syncing'
-            ? 'Syncing...'
-            : tx.status === 'failed'
-            ? 'Failed'
-            : 'Queued (Offline)';
+              ? 'Syncing...'
+              : tx.status === 'failed'
+                ? 'Failed'
+                : 'Queued (Offline)';
 
         const currentCurrency = displayCurrency || 'USD';
         const rate = algoRates?.[currentCurrency] || (currentCurrency === 'INR' ? 15.25 : currentCurrency === 'EUR' ? 0.165 : 0.18);
         const currencySymbol = currentCurrency === 'INR' ? '₹' : currentCurrency === 'EUR' ? '€' : '$';
         const fiatVal = (tx.amount * rate).toFixed(2);
+        const iconBg =
+          tx.status === 'pending'
+            ? '#F79E1B'
+            : tx.status === 'syncing'
+              ? '#2E90FA'
+              : tx.status === 'failed'
+                ? '#F04438'
+                : isPaid
+                  ? '#172B3E'
+                  : '#05DA93';
+
+        const iconName: keyof typeof Ionicons.glyphMap =
+          tx.status === 'pending'
+            ? 'time'
+            : tx.status === 'syncing'
+              ? 'sync'
+              : tx.status === 'failed'
+                ? 'alert-circle'
+                : isPaid
+                  ? 'arrow-up-circle'
+                  : 'arrow-down-circle';
 
         return {
           id: tx.id,
@@ -205,8 +226,8 @@ export default function TransactionsScreen() {
           fiatSubText: `≈ ${currencySymbol}${fiatVal} ${currentCurrency}`,
           isPositive: !isPaid,
           dateGroup,
-          iconBg: isPaid ? '#172B3E' : '#05DA93',
-          iconName: isPaid ? 'arrow-up-circle' : 'arrow-down-circle',
+          iconBg,
+          iconName,
           statusText,
           formattedTime
         };

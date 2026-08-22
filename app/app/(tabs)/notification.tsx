@@ -37,7 +37,7 @@ interface NotificationItem {
 
 export default function NotificationScreen() {
   const router = useRouter();
-  const { walletAddress, transactions, verifiedPhone, notificationsClearedAt, setNotificationsClearedAt } = useWalletStore();
+  const { walletAddress, transactions, verifiedPhone, notificationsClearedAt, setNotificationsClearedAt, readTxIds, markTxAsRead } = useWalletStore();
   const appLockEnabled = useSecurityStore((state) => state.appLockEnabled);
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
@@ -45,11 +45,14 @@ export default function NotificationScreen() {
   const dynamicNotifications = React.useMemo(() => {
     const items: NotificationItem[] = [];
 
-    // Generate real payment notifications from transactions
+    // Generate real payment notifications from transactions (Received payments only)
     if (transactions && transactions.length > 0) {
       transactions.forEach((tx) => {
         const isPaid = tx.sender?.toLowerCase() === (walletAddress || '').toLowerCase();
-        const target = isPaid ? (tx.receiver || 'Recipient') : (tx.sender || 'Sender');
+        // Only display Receive payments in notifications; skip Send payments
+        if (isPaid) return;
+
+        const target = tx.sender || 'Sender';
         const isPhone = target.replace(/\D/g, '').length >= 8 && target.length < 50;
         const displayName = isPhone
           ? target
@@ -63,15 +66,13 @@ export default function NotificationScreen() {
         items.push({
           id: `notif-tx-${tx.id}`,
           type: 'payment',
-          title: isPaid ? 'Payment Sent' : 'Payment Received',
-          message: isPaid
-            ? `Transferred -${tx.amount.toFixed(2)} ALGO to ${displayName}.`
-            : `Received +${tx.amount.toFixed(2)} ALGO from ${displayName}.`,
+          title: 'Payment Received',
+          message: `Received +${tx.amount.toFixed(2)} ALGO from ${displayName}.`,
           time: timeFormatted,
-          isUnread: tx.status === 'pending',
-          iconName: isPaid ? 'arrow-up-circle' : 'arrow-down-circle',
-          iconBg: isPaid ? '#FEF3F2' : '#ECFDF3',
-          iconColor: isPaid ? '#D92D20' : '#12B76A',
+          isUnread: !readTxIds.includes(tx.id),
+          iconName: 'arrow-down-circle',
+          iconBg: '#ECFDF3',
+          iconColor: '#12B76A',
           rawTx: tx
         });
       });
@@ -189,13 +190,14 @@ export default function NotificationScreen() {
 
   const handleItemPress = (item: NotificationItem) => {
     setReadStateMap((prev) => ({ ...prev, [item.id]: true }));
-    if (!item.id.startsWith('notif-')) {
-      void markNotificationReadInApi(item.id);
-    }
     if (item.rawTx) {
+      markTxAsRead(item.rawTx.id);
       setSelectedTx(item.rawTx);
       setIsModalOpen(true);
     } else {
+      if (!item.id.startsWith('notif-')) {
+        void markNotificationReadInApi(item.id);
+      }
       setSelectedNotif(item);
       setIsNotifModalOpen(true);
     }
@@ -407,15 +409,23 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3
   },
   unreadCountBadge: {
-    backgroundColor: colors.secondary,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10
+    backgroundColor: '#F04438',
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 3,
+    shadowColor: '#F04438',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4
   },
   unreadCountBadgeText: {
-    color: colors.primaryDark,
+    color: '#FFFFFF',
     fontSize: 11,
-    fontFamily: 'Inter_700Bold'
+    fontFamily: 'Inter_700Bold',
+    letterSpacing: 0.3
   },
   markReadBtn: {
     flexDirection: 'row',
