@@ -4,7 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -176,9 +176,13 @@ function getDynamicRecentContacts(transactions: GhostTransaction[], currentWalle
 
 export default function SendScreen() {
   const router = useRouter();
-  const { walletAddress, balanceAlgo, enqueueOfflinePayment, isConnected, demoMode, transactions, displayCurrency, algoRates } = useWalletStore();
+  const { walletAddress, balanceAlgo, enqueueOfflinePayment, isConnected, demoMode, transactions, displayCurrency, algoRates, fetchExchangeRates } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
+
+  useEffect(() => {
+    void fetchExchangeRates();
+  }, [fetchExchangeRates]);
 
   const dynamicRecentContacts = useMemo(
     () => getDynamicRecentContacts(transactions, walletAddress),
@@ -458,11 +462,23 @@ export default function SendScreen() {
       return;
     }
 
-    const currentCurrency = displayCurrency || 'USD';
-    const rate = algoRates?.[currentCurrency] || (currentCurrency === 'INR' ? 15.25 : currentCurrency === 'EUR' ? 0.165 : 0.18);
-    const numericAmount = currencyMode === 'FIAT' ? inputAmount / rate : inputAmount;
-
     setIsSubmitting(true);
+    setProcessingStatus('Fetching live market rates...');
+
+    const currentCurrency = displayCurrency || 'USD';
+    let liveRate = algoRates?.[currentCurrency] || (currentCurrency === 'INR' ? 15.25 : currentCurrency === 'EUR' ? 0.165 : 0.18);
+
+    try {
+      await fetchExchangeRates();
+      const freshRates = useWalletStore.getState().algoRates;
+      if (freshRates?.[currentCurrency] && freshRates[currentCurrency] > 0) {
+        liveRate = freshRates[currentCurrency];
+      }
+    } catch {
+      // Fallback to cached store rate if offline
+    }
+
+    const numericAmount = currencyMode === 'FIAT' ? inputAmount / liveRate : inputAmount;
 
     try {
       const isEffectiveOnline = isConnected && !demoMode.simulateOffline;
@@ -497,7 +513,7 @@ export default function SendScreen() {
           senderWallet: walletAddress,
           receiverWallet: targetAddress,
           amount: numericAmount,
-          asset: currencyMode === 'FIAT' ? (displayCurrency || 'USD') : 'ALGO'
+          asset: 'ALGO'
         })
       ]);
 
