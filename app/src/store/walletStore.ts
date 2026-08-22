@@ -1,5 +1,6 @@
 import algosdk from 'algosdk';
 import { Buffer } from 'buffer';
+import * as Notifications from 'expo-notifications';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { fetchBalanceFromApi, fetchNetworkInfo, sendTransactionToAlgorand, fetchTransactionsFromApi } from '../services/api';
@@ -11,6 +12,21 @@ const ALGO_TX_FEE_BUFFER = 0.001;
 const ALGO_MIN_BALANCE_RESERVE = 0.1;
 const ALGONODE_MAINNET = 'https://mainnet-api.algonode.cloud';
 const ALGONODE_TESTNET = 'https://testnet-api.algonode.cloud';
+
+async function triggerLocalNotification(title: string, body: string) {
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title,
+        body,
+        sound: true
+      },
+      trigger: null
+    });
+  } catch (error) {
+    console.warn('Error scheduling local notification:', error);
+  }
+}
 
 type DemoMode = {
   simulateOffline: boolean;
@@ -415,6 +431,13 @@ export const useWalletStore = create<WalletState>()(
           transactions: [transaction, ...state.transactions]
         }));
 
+        if (get().demoMode.simulateOffline) {
+          void triggerLocalNotification(
+            'Offline Payment Queued',
+            `Your payment of ${amount} ALGO has been signed and queued offline. It will sync automatically when back online.`
+          );
+        }
+
         // Trigger network sync automatically
         void get().syncPendingTransactions();
 
@@ -485,6 +508,10 @@ export const useWalletStore = create<WalletState>()(
                   error: err?.message || 'Broadcast failed on Algorand network'
                 })
               }));
+              void triggerLocalNotification(
+                'Payment Sync Failed',
+                `Payment of ${tx.amount} ALGO failed to sync: ${err?.message || 'Broadcast failed'}`
+              );
               continue;
             }
 
@@ -498,6 +525,10 @@ export const useWalletStore = create<WalletState>()(
                 error: undefined
               })
             }));
+            void triggerLocalNotification(
+              'Payment Confirmed',
+              `Your payment of ${tx.amount} ALGO has been confirmed on-chain on ${network || 'testnet'}.`
+            );
           } catch {
             set((current) => ({
               transactions: withUpdatedTransaction(current.transactions, tx.id, {
@@ -505,6 +536,10 @@ export const useWalletStore = create<WalletState>()(
                 txHash: `GHOST-${Date.now()}`
               })
             }));
+            void triggerLocalNotification(
+              'Payment Confirmed (Simulated)',
+              `Your payment of ${tx.amount} ALGO has been confirmed (simulated offline bypass).`
+            );
           }
         }
 
@@ -538,11 +573,33 @@ export const useWalletStore = create<WalletState>()(
           if (apiTxs && apiTxs.length > 0) {
             const map = new Map<string, GhostTransaction>();
             localTxs.forEach((t) => map.set(t.id, t));
+
+            let receivedTxCount = 0;
+            let lastReceivedAmount = 0;
+            let lastSender = '';
+
             apiTxs.forEach((t) => {
               if (!map.has(t.id)) {
+                // Check if we are the recipient and NOT the sender of this new transaction
+                if (
+                  t.receiver?.toLowerCase() === walletAddress.toLowerCase() &&
+                  t.sender?.toLowerCase() !== walletAddress.toLowerCase()
+                ) {
+                  receivedTxCount++;
+                  lastReceivedAmount = t.amount;
+                  lastSender = t.sender;
+                }
                 map.set(t.id, t);
               }
             });
+
+            if (receivedTxCount > 0) {
+              const body = receivedTxCount === 1
+                ? `Received ${lastReceivedAmount.toFixed(2)} ALGO from ${lastSender.slice(0, 6)}...${lastSender.slice(-4)}`
+                : `Received ${receivedTxCount} new payments.`;
+              void triggerLocalNotification('Payment Received', body);
+            }
+
             const merged = Array.from(map.values()).sort(
               (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
             );
