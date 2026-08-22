@@ -14,6 +14,9 @@ const ALGONODE_MAINNET = 'https://mainnet-api.algonode.cloud';
 const ALGONODE_TESTNET = 'https://testnet-api.algonode.cloud';
 
 async function triggerLocalNotification(title: string, body: string) {
+  if (!useWalletStore.getState().pushNotificationsEnabled) {
+    return;
+  }
   try {
     await Notifications.scheduleNotificationAsync({
       content: {
@@ -89,6 +92,8 @@ type WalletState = {
   setNotificationsClearedAt: (date: string | null) => void;
   readTxIds: string[];
   markTxAsRead: (txId: string) => void;
+  pushNotificationsEnabled: boolean;
+  setPushNotificationsEnabled: (enabled: boolean) => void;
   fetchExchangeRates: () => Promise<void>;
   hydrateSampleData: () => void;
   loadNetworkInfo: () => Promise<boolean>;
@@ -219,6 +224,8 @@ export const useWalletStore = create<WalletState>()(
           return { readTxIds: [...state.readTxIds, txId] };
         });
       },
+      pushNotificationsEnabled: true,
+      setPushNotificationsEnabled: (enabled) => set({ pushNotificationsEnabled: enabled }),
       algoRates: { USD: 0.15, INR: 12.5, EUR: 0.14 },
       fetchExchangeRates: async () => {
         try {
@@ -672,7 +679,8 @@ export const useWalletStore = create<WalletState>()(
         userName: state.userName,
         displayCurrency: state.displayCurrency,
         notificationsClearedAt: state.notificationsClearedAt,
-        readTxIds: state.readTxIds
+        readTxIds: state.readTxIds,
+        pushNotificationsEnabled: state.pushNotificationsEnabled
       })
     }
   )
