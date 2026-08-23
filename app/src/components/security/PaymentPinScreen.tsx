@@ -139,6 +139,16 @@ export function PaymentPinScreen({
           end={{ x: 1, y: 1 }}
         >
           <SafeAreaView style={styles.safeArea}>
+            <Pressable
+              accessibilityLabel="Go back"
+              accessibilityRole="button"
+              disabled={isAuthenticating}
+              onPress={onCancel}
+              style={({ pressed }) => [styles.backButton, pressed && styles.keypadBtnPressed]}
+            >
+              <Ionicons name="arrow-back" size={24} color="#172B3E" />
+            </Pressable>
+
             <View style={styles.fixedViewport}>
               <View style={styles.headerSection}>
                 <Text style={styles.amountText}>{amountSummary.primary}</Text>
@@ -147,7 +157,7 @@ export function PaymentPinScreen({
 
               <View style={styles.lockCard}>
                 <View style={styles.lockIconCircle}>
-                  <Ionicons name="lock-open-outline" size={35} color="#12B76A" />
+                  <Ionicons name="lock-open-outline" size={28} color="#12B76A" />
                 </View>
 
                 <Text style={styles.cardTitle}>Confirm Payment</Text>
@@ -162,12 +172,10 @@ export function PaymentPinScreen({
                   ))}
                 </View>
 
-                {errorMessage ? (
-                  <View style={styles.errorRow}>
-                    <View style={styles.errorDot} />
-                    <Text style={styles.errorText}>{errorMessage}</Text>
-                  </View>
-                ) : null}
+                <View style={[styles.errorRow, !errorMessage && styles.errorRowHidden]}>
+                  <View style={styles.errorDot} />
+                  <Text style={styles.errorText}>{errorMessage || ' '}</Text>
+                </View>
 
                 <View style={styles.keypadGrid}>
                   {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((key) => (
@@ -256,12 +264,23 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1
   },
+  backButton: {
+    position: 'absolute',
+    top: 14,
+    left: 20,
+    zIndex: 1,
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
   fixedViewport: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 26,
-    paddingVertical: 8
+    paddingTop: 36,
+    paddingBottom: 8
   },
   headerSection: {
     alignItems: 'center',
@@ -298,36 +317,36 @@ const styles = StyleSheet.create({
     elevation: 5
   },
   lockIconCircle: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: '#f5f9f8',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
-    borderWidth: 3,
+    marginBottom: 12,
+    borderWidth: 2,
     borderColor: '#0fd89b'
   },
   cardTitle: {
     color: '#172B3E',
-    fontSize: 32,
+    fontSize: 27,
     fontFamily: 'Orbitron_700Bold',
-    marginBottom: 8,
+    marginBottom: 6,
     textAlign: 'center'
   },
   cardSubtitle: {
     color: '#4f667c',
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: 'Inter_500Medium',
     textAlign: 'center',
-    marginBottom: 18,
-    lineHeight: 26
+    marginBottom: 14,
+    lineHeight: 22
   },
   pinDotsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16
+    marginBottom: 12
   },
   pinDot: {
     width: 14,
@@ -346,6 +365,7 @@ const styles = StyleSheet.create({
   },
   errorRow: {
     width: '100%',
+    height: 36,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -353,9 +373,12 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderBottomWidth: 1,
     borderColor: '#f4d7d7',
-    paddingVertical: 10,
-    marginBottom: 16,
+    paddingHorizontal: 8,
+    marginBottom: 10,
     overflow: 'hidden'
+  },
+  errorRowHidden: {
+    opacity: 0
   },
   errorDot: {
     width: 10,
@@ -366,7 +389,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#d92d20',
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
     textAlign: 'center'
   },
@@ -375,10 +398,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
-    rowGap: 12,
-    columnGap: 12,
-    marginTop: 6,
-    marginBottom: 12
+    rowGap: 8,
+    columnGap: 8,
+    marginTop: 4,
+    marginBottom: 8
   },
   keypadCell: {
     width: '30%',
@@ -386,9 +409,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center'
   },
   keypadBtn: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     backgroundColor: '#f2f4f6',
     alignItems: 'center',
     justifyContent: 'center',
@@ -407,7 +430,7 @@ const styles = StyleSheet.create({
   },
   keypadBtnText: {
     color: '#172B3E',
-    fontSize: 28,
+    fontSize: 24,
     fontFamily: 'Inter_700Bold'
   },
   clearText: {
@@ -417,13 +440,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 12,
-    paddingVertical: 10,
+    marginTop: 6,
+    paddingVertical: 8,
     width: '100%'
   },
   biometricText: {
     color: '#12B76A',
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: 'Inter_600SemiBold'
   }
 });

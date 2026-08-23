@@ -243,33 +243,12 @@ export const useWalletStore = create<WalletState>()(
       },
 
       hydrateSampleData: () => {
-        const current = get().transactions;
-        if (current.length > 0) {
-          return;
+        // Purge any legacy demo transactions from persistent storage
+        const current = get().transactions || [];
+        const filtered = current.filter((tx) => !tx.id.startsWith('demo-'));
+        if (filtered.length !== current.length) {
+          set({ transactions: filtered });
         }
-
-        const now = Date.now();
-        const sampleTxs: GhostTransaction[] = [
-          {
-            id: 'demo-pending-1',
-            sender: 'DEMO-SENDER-ADDRESS',
-            receiver: 'DEMO-RECEIVER-ADDRESS',
-            amount: 2.4,
-            timestamp: new Date(now - 1000 * 60 * 9).toISOString(),
-            status: 'pending'
-          },
-          {
-            id: 'demo-confirmed-1',
-            sender: 'DEMO-SENDER-ADDRESS',
-            receiver: 'DEMO-RECEIVER-ADDRESS',
-            amount: 1.1,
-            timestamp: new Date(now - 1000 * 60 * 60).toISOString(),
-            status: 'confirmed',
-            txHash: 'DEMO-CONFIRMED-HASH'
-          }
-        ];
-
-        set({ transactions: sampleTxs });
       },
 
       loadNetworkInfo: async () => {
@@ -301,7 +280,8 @@ export const useWalletStore = create<WalletState>()(
         const normalizedAddress = address.trim();
         set((state) => ({
           walletAddress: normalizedAddress,
-          wallets: normalizedAddress ? upsertWallet(state.wallets, normalizedAddress) : state.wallets
+          wallets: normalizedAddress ? upsertWallet(state.wallets, normalizedAddress) : state.wallets,
+          transactions: state.transactions.filter((tx) => !tx.id.startsWith('demo-'))
         }));
       },
 
