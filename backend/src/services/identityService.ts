@@ -2,7 +2,9 @@ import algosdk from 'algosdk';
 import { env } from '../config/env.js';
 import { MobileIdentityModel } from '../models/MobileIdentity.js';
 import { MobileVerificationModel } from '../models/MobileVerification.js';
-import { sendOtpSms } from './smsService.js';
+import { sendOtpEmail } from './emailService.js';
+// SMS kept for backward compatibility — email is the active delivery channel
+// import { sendOtpSms } from './smsService.js';
 
 type WalletRecord = {
   walletId: string;
@@ -61,12 +63,21 @@ function toWalletRecords(wallets: Array<{
 }
 
 export function normalizeMobileNumber(input: string): string {
-  const digits = input.replace(/\D/g, '');
+  const trimmed = input.trim();
 
+  // If it looks like an email, return as-is (email-based identity)
+  if (trimmed.includes('@')) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      throw new Error('Invalid email address format');
+    }
+    return trimmed.toLowerCase();
+  }
+
+  // Otherwise treat as phone number
+  const digits = trimmed.replace(/\D/g, '');
   if (digits.length < 8 || digits.length > 15) {
     throw new Error('Mobile number must contain between 8 and 15 digits');
   }
-
   return `+${digits}`;
 }
 
@@ -105,13 +116,13 @@ export async function requestMobileVerification(mobileNumberRaw: string) {
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
-  const sms = await sendOtpSms(mobileNumber, otpCode);
+  const email = await sendOtpEmail(mobileNumber, otpCode);
 
   return {
     mobileNumber,
-    verificationSent: sms.delivered,
+    verificationSent: email.delivered,
     expiresInSeconds: env.otpExpiryMinutes * 60,
-    sms,
+    email,
     devOtpCode: env.revealOtpInResponse ? otpCode : undefined
   };
 }

@@ -59,5 +59,8 @@ export const env = {
   enforceContract: process.env.ENFORCE_CONTRACT === 'true',
   requireIdentityForSend: process.env.REQUIRE_IDENTITY_FOR_SEND !== 'false',
   // x402 account mapping — set to a strong secret in production; leave empty for open dev access
-  accountsApiKey: process.env.ACCOUNTS_API_KEY ?? ''
+  accountsApiKey: process.env.ACCOUNTS_API_KEY ?? '',
+  // Email OTP delivery via Gmail
+  gmailUser: process.env.GMAIL_USER ?? '',
+  gmailAppPassword: process.env.GMAIL_APP_PASSWORD ?? ''
 };
