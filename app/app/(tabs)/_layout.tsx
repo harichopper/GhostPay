@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../src/theme/colors';
 
@@ -25,8 +25,11 @@ export default function TabsLayout() {
               <View>
                 {/* Sidebar Brand Header */}
                 <View style={styles.sidebarBrandRow}>
-                  <Ionicons name="flash-sharp" size={22} color={colors.secondary} />
-                  <Text style={styles.sidebarBrandText}>GHOSTPAY</Text>
+                  <Image
+                    source={require('../../assets/app_logo/ghostpay-logo-removebg.png')}
+                    style={styles.sidebarLogo}
+                    resizeMode="contain"
+                  />
                 </View>
 
                 {/* Vertical Navigation Items */}
@@ -179,7 +182,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#172B3E',
     borderRightWidth: 1,
     borderRightColor: 'rgba(255, 255, 255, 0.08)',
-    paddingVertical: 28,
+    paddingVertical: 14,
     paddingHorizontal: 16,
     justifyContent: 'space-between',
     zIndex: 9999
@@ -188,14 +191,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    marginBottom: 32
+    marginBottom: 12
   },
-  sidebarBrandText: {
-    color: colors.white,
-    fontSize: 16,
-    fontFamily: 'Orbitron_700Bold',
-    marginLeft: 10,
-    letterSpacing: 1
+  sidebarLogo: {
+    width: 160,
+    height: 160
   },
   sidebarNavList: {
     gap: 8
