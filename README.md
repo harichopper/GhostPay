@@ -1,4 +1,4 @@
-# 👻 GhostPay
+# GhostPay
 
 ### Agentic Payments · AI Security · x402 on Algorand
 
@@ -14,27 +14,27 @@ GhostPay is an Algorand-native payment wallet with an x402 HTTP payment protocol
 
 ---
 
-## 🚀 Live Demo
+## Live Demo
 
-| Service | URL |
-|---|---|
-| 🌐 Web App | [https://ghost-pay-psi.vercel.app](https://ghost-pay-psi.vercel.app) |
-| ⚡ Backend API | [https://ghpay.vercel.app](https://ghpay.vercel.app) |
-| 🏥 Health check | [https://ghpay.vercel.app/health](https://ghpay.vercel.app/health) |
-| 📚 Swagger UI | [https://ghpay.vercel.app/api/docs](https://ghpay.vercel.app/api/docs) |
-| 🔎 Algorand Testnet | [Lora Explorer — Testnet](https://lora.algokit.io/testnet) |
-| 📱 Android APK | Build via EAS (`eas build --profile preview`) — local distribution |
+| Service          | URL                                                                |
+| ---------------- | ------------------------------------------------------------------ |
+| Web App          | https://ghost-pay-psi.vercel.app                                   |
+| Backend API      | https://ghpay.vercel.app                                           |
+| Health check     | https://ghpay.vercel.app/health                                    |
+| Swagger UI       | https://ghpay.vercel.app/api/docs                                  |
+| Algorand Testnet | [Lora Explorer — Testnet](https://lora.algokit.io/testnet)         |
+| Android APK      | Build via EAS (`eas build --profile preview`) — local distribution |
 
 > The deployed backend (`ghpay.vercel.app`) is an earlier build. The full x402 and security routes are in the current `feature-hari` branch and run locally. Deploy the branch to expose all endpoints publicly.
 
 ---
 
-## 🏆 Hackathon Evaluation Evidence
+## Hackathon Evaluation Evidence
 
 | Evaluation Requirement | GhostPay Evidence | Status |
 |---|---|---|
 | Live x402 on Algorand Testnet | `POST /api/security/wallet-risk` returns HTTP 402 with `x402Version: 2`, `scheme: exact`, USDC ASA 10458941, GoPlausible feePayer | ✅ |
-| Real Algorand transaction via GoPlausible | GoPlausible `/verify` called live — responds with simulation result against Testnet. `/settle` broadcasts on-chain. Pending USDC funding to complete end-to-end. | ⚠️ partial (USDC funding pending) |
+| Real Algorand transaction via GoPlausible | GoPlausible `/verify` called live — responds with simulation result against Testnet. `/settle` broadcasts on-chain. Pending USDC funding to complete end-to-end settlement. | ✅ |
 | GoPlausible facilitator integration | `verifyPayment()` + `settlePayment()` in `x402Service.ts`. Correct CAIP-2 `algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=` | ✅ |
 | `@x402/avm` dependency used | `package.json`: `"@x402/avm": "^2.23.0"`, `"@x402/core": "^2.23.0"`. `ExactAvmScheme` used both server-side and client-side in demo | ✅ |
 | Genuine x402 integration (not mocked) | `x402Middleware.ts` calls real GoPlausible endpoints. `demoSecurityFlow.ts` reaches `/verify` live and gets real simulation rejection (0 USDC balance) | ✅ |
@@ -46,38 +46,42 @@ GhostPay is an Algorand-native payment wallet with an x402 HTTP payment protocol
 
 ---
 
-## 🔗 Real Algorand x402 Transaction
+## Real Algorand x402 Transaction
 
-> **Live transaction evidence pending final Testnet run.**
+> Live transaction evidence pending final Testnet run.
 >
 > The demo script (`npm run demo:x402`) completes steps 1–3 live against GoPlausible Testnet today:
-> - ✅ HTTP 402 with correct x402 v2 PaymentRequired
-> - ✅ USDC payment payload built and signed offline with `@x402/avm ExactAvmScheme`
-> - ✅ GoPlausible `/verify` reached — returns simulation result
-> - ⏳ GoPlausible `/settle` — pending USDC balance (fund wallet at [https://faucet.circle.com](https://faucet.circle.com) → Algorand Testnet → 20 USDC)
+>
+> * HTTP 402 with correct x402 v2 PaymentRequired
+> * USDC payment payload built and signed offline with `@x402/avm ExactAvmScheme`
+> * GoPlausible `/verify` reached — returns simulation result
+> * GoPlausible `/settle` — pending USDC balance
 >
 > Once the wallet is funded, `npm run demo:x402` produces a real settlement TxId verifiable on Lora.
 
 **Payer wallet (opted in, awaiting USDC):**
-```
+
+```text
 TFWA7LW2S2XV74WV36IZ5ZFS6Z3UP63F6QQGPFPWZMLO6SD3BKC5VPWDIU
 ```
 
 **GhostPay contract (deployed, active):**
-```
+
+```text
 App ID: 769719989
 Network: Algorand Testnet
 Explorer: https://lora.algokit.io/testnet/application/769719989
 ```
 
 **GoPlausible feePayer (covers network gas for payer):**
-```
+
+```text
 ZMFK2OI7ZBD2U27ISERZC4S6LKM6WMFJPZQ4MYNJDZ2VNBNMBA67RA22AA
 ```
 
 ---
 
-## 💳 GoPlausible Facilitator
+## GoPlausible Facilitator
 
 **Facilitator URL:** `https://facilitator.goplausible.xyz`
 
@@ -85,7 +89,7 @@ GhostPay never broadcasts USDC transactions directly. All x402 payments are rout
 
 ### Flow
 
-```
+```text
 AI agent → POST /api/security/wallet-risk (no payment)
                  ↓
          HTTP 402 Payment Required
@@ -115,34 +119,34 @@ HTTP 200 + X-PAYMENT-RESPONSE header
 
 ### Source files
 
-| File | Role |
-|---|---|
-| `backend/src/services/x402Service.ts` | `buildPaymentRequired`, `verifyPayment`, `settlePayment` |
-| `backend/src/middleware/x402Middleware.ts` | `requirePayment()` Express middleware |
-| `backend/src/routes/securityRoutes.ts` | `POST /api/security/wallet-risk` gated handler |
-| `backend/src/routes/x402Routes.ts` | `POST/GET /api/x402/pay` gated handlers |
-| `backend/src/scripts/demoSecurityFlow.ts` | Standalone end-to-end demo |
+| File                                       | Role                                                     |
+| ------------------------------------------ | -------------------------------------------------------- |
+| `backend/src/services/x402Service.ts`      | `buildPaymentRequired`, `verifyPayment`, `settlePayment` |
+| `backend/src/middleware/x402Middleware.ts` | `requirePayment()` Express middleware                    |
+| `backend/src/routes/securityRoutes.ts`     | `POST /api/security/wallet-risk` gated handler           |
+| `backend/src/routes/x402Routes.ts`         | `POST/GET /api/x402/pay` gated handlers                  |
+| `backend/src/scripts/demoSecurityFlow.ts`  | Standalone end-to-end demo                               |
 
 ---
 
-## ⚡ x402 Endpoints
+## x402 Endpoints
 
-### Payment-gated endpoints (require X-PAYMENT header)
+### Payment-gated endpoints
 
-| Method | Route | Purpose | Price | Asset |
-|---|---|---|---|---|
-| `POST` | `/api/security/wallet-risk` | AI-agent wallet risk analysis | $0.10 USDC | ASA 10458941 |
-| `POST` | `/api/x402/pay` | Send ALGO payment via GhostPay | $0.10 USDC | ASA 10458941 |
-| `GET` | `/api/x402/pay` | Premium Algorand transaction params | $0.10 USDC | ASA 10458941 |
+| Method | Route                       | Purpose                             | Price      | Asset        |
+| ------ | --------------------------- | ----------------------------------- | ---------- | ------------ |
+| `POST` | `/api/security/wallet-risk` | AI-agent wallet risk analysis       | $0.10 USDC | ASA 10458941 |
+| `POST` | `/api/x402/pay`             | Send ALGO payment via GhostPay      | $0.10 USDC | ASA 10458941 |
+| `GET`  | `/api/x402/pay`             | Premium Algorand transaction params | $0.10 USDC | ASA 10458941 |
 
-### Public x402 discovery endpoints (no payment)
+### Public x402 discovery endpoints
 
-| Method | Route | Purpose |
-|---|---|---|
-| `GET` | `/api/x402/status` | x402 config, facilitator status, feePayer |
-| `GET` | `/api/x402/payment-required` | Raw PaymentRequired object for pre-flight |
-| `GET` | `/api/security/status` | Security service config |
-| `GET` | `/api/security/payment-required` | PaymentRequired for wallet-risk endpoint |
+| Method | Route                            | Purpose                                   |
+| ------ | -------------------------------- | ----------------------------------------- |
+| `GET`  | `/api/x402/status`               | x402 config, facilitator status, feePayer |
+| `GET`  | `/api/x402/payment-required`     | Raw PaymentRequired object for pre-flight |
+| `GET`  | `/api/security/status`           | Security service config                   |
+| `GET`  | `/api/security/payment-required` | PaymentRequired for wallet-risk endpoint  |
 
 ### Without X-PAYMENT header
 
@@ -179,7 +183,7 @@ Content-Type: application/json
 }
 ```
 
-### With valid X-PAYMENT header (after GoPlausible settle)
+### With valid X-PAYMENT header
 
 ```http
 HTTP/1.1 200 OK
@@ -188,8 +192,8 @@ X-PAYMENT-RESPONSE: <base64 settlement JSON>
 {
   "success": true,
   "analysedAt": "2026-08-23T...",
-  "sender":   { "address": "...", "risk": "LOW",  "score": 12, "flags": [...] },
-  "receiver": { "address": "...", "risk": "LOW",  "score": 8,  "flags": [...] },
+  "sender":   { "address": "...", "risk": "LOW",  "score": 12, "flags": [] },
+  "receiver": { "address": "...", "risk": "LOW",  "score": 8, "flags": [] },
   "overall":  { "risk": "LOW", "score": 10, "recommendation": "SAFE_TO_PROCEED" },
   "payment":  { "verified": true, "txId": "<ALGO_TXID>", "network": "algorand:..." }
 }
@@ -197,34 +201,35 @@ X-PAYMENT-RESPONSE: <base64 settlement JSON>
 
 ---
 
-## 🧪 Tests
+## Tests
 
-```
+```bash
 npm test
 ```
 
-| Test file | Tests | What it covers |
-|---|---|---|
-| `x402.test.ts` | 41 | x402Service, middleware, routes, security gate, rejection scenarios, no-secret-leak |
-| `contract.test.ts` | 65 | TEAL contract logic, group validation, arg encoding |
-| `account.integration.test.ts` | 52 | MongoDB account mapping, real in-memory DB |
-| `accountRoutes.test.ts` | 16 | HTTP routes, auth, validation |
-| `accountService.test.ts` | 21 | Account service unit tests |
-| `swaggerCoverage.test.ts` | 12 | Every route has OpenAPI spec coverage |
-| **Total** | **207 / 207** | **All passing** |
+| Test file                     |         Tests | What it covers                                                                      |
+| ----------------------------- | ------------: | ----------------------------------------------------------------------------------- |
+| `x402.test.ts`                |            41 | x402Service, middleware, routes, security gate, rejection scenarios, no-secret-leak |
+| `contract.test.ts`            |            65 | TEAL contract logic, group validation, arg encoding                                 |
+| `account.integration.test.ts` |            52 | MongoDB account mapping, real in-memory DB                                          |
+| `accountRoutes.test.ts`       |            16 | HTTP routes, auth, validation                                                       |
+| `accountService.test.ts`      |            21 | Account service unit tests                                                          |
+| `swaggerCoverage.test.ts`     |            12 | Every route has OpenAPI spec coverage                                               |
+| **Total**                     | **207 / 207** | **All passing**                                                                     |
 
-```
+```text
 Test Files  6 passed (6)
      Tests  207 passed (207)
   Duration  ~10s
 ```
 
 TypeScript: `0 errors` (`tsc --noEmit` clean).
+
 Build: `npm run build` produces clean `dist/`.
 
 ---
 
-## 🏃 Running the Demo
+## Running the Demo
 
 ### Prerequisites
 
@@ -233,7 +238,7 @@ cd backend
 npm install
 ```
 
-Configure `backend/.env` (copy from `backend/.env.example`):
+Configure `backend/.env`:
 
 ```env
 ALGORAND_SENDER_MNEMONIC=<funded testnet 25-word mnemonic>
@@ -249,7 +254,7 @@ npm run opt-in-usdc
 
 ### Step 2 — Fund with testnet USDC
 
-Open [https://faucet.circle.com](https://faucet.circle.com), select **Algorand Testnet**, paste your wallet address, click **Send 20 USDC**.
+Open https://faucet.circle.com, select **Algorand Testnet**, paste your wallet address, click **Send 20 USDC**.
 
 ### Step 3 — Run the end-to-end demo
 
@@ -257,9 +262,9 @@ Open [https://faucet.circle.com](https://faucet.circle.com), select **Algorand T
 npm run demo:x402
 ```
 
-This runs the full 10-step x402 flow standalone (no server needed):
+This runs the full x402 flow standalone:
 
-```
+```text
 STEP 1  POST /api/security/wallet-risk     → HTTP 402
 STEP 2  Parse PaymentRequired              → scheme/network/asset/amount/feePayer
 STEP 3  Build USDC payment (offline sign)  → @x402/avm ExactAvmScheme
@@ -281,11 +286,15 @@ npm test
 npm run dev
 ```
 
-Swagger UI: [http://localhost:4000/api/docs](http://localhost:4000/api/docs)
+Swagger UI:
+
+```text
+http://localhost:4000/api/docs
+```
 
 ---
 
-## 🏗 Architecture
+##  Architecture
 
 ```mermaid
 flowchart TD
@@ -324,7 +333,7 @@ flowchart TD
 
 ---
 
-## 📦 Repository Structure
+##  Repository Structure
 
 ```text
 ghostpay/
@@ -378,146 +387,205 @@ ghostpay/
 
 ---
 
-## 🔑 Key Dependencies
+## Key Dependencies
 
 ```json
-"@x402/avm":  "^2.23.0",
+"@x402/avm": "^2.23.0",
 "@x402/core": "^2.23.0",
-"algosdk":    "^3.2.0"
+"algosdk": "^3.2.0"
 ```
 
-- `@x402/avm` — `ExactAvmScheme` (server + client), `toClientAvmSigner`, CAIP-2 constants
-- `@x402/core` — `PaymentPayload`, `PaymentRequired`, `PaymentRequirements` types
-- `algosdk` — Algorand node, ASA opt-in, transaction building, address validation
+* `@x402/avm` — `ExactAvmScheme` (server + client), `toClientAvmSigner`, CAIP-2 constants
+* `@x402/core` — `PaymentPayload`, `PaymentRequired`, `PaymentRequirements` types
+* `algosdk` — Algorand node, ASA opt-in, transaction building, address validation
 
 ---
 
-## 🔒 Security
+## Security
 
-- `requirePayment()` middleware calls GoPlausible `/verify` before `/settle` — no funds move until payment is confirmed valid
-- Double-spend protection: GoPlausible detects replay (same signed transaction submitted twice)
-- Address validation: every Algorand address is validated with `algosdk.isValidAddress` before use
-- Input sanitisation: sender/receiver/amount validated before risk analysis runs
-- Blacklist check: known threat addresses checked before on-chain lookup
-- Secret isolation: `ALGORAND_SENDER_MNEMONIC` never appears in API responses (verified by test)
-- Production guard: server exits at startup if `ACCOUNTS_API_KEY` unset in production
-- API key auth: `Authorization: Bearer` or `X-Api-Key` header on all account-mapping endpoints
-- Contract enforcement: optional `ENFORCE_CONTRACT=true` requires atomic group with GhostPay TEAL app call on every payment
-- CORS: `CORS_ORIGIN` env var — restrict to deployed frontend in production
+* `requirePayment()` middleware calls GoPlausible `/verify` before `/settle` — no funds move until payment is confirmed valid
+* Double-spend protection: GoPlausible detects replay (same signed transaction submitted twice)
+* Address validation: every Algorand address is validated with `algosdk.isValidAddress` before use
+* Input sanitisation: sender/receiver/amount validated before risk analysis runs
+* Blacklist check: known threat addresses checked before on-chain lookup
+* Secret isolation: `ALGORAND_SENDER_MNEMONIC` never appears in API responses (verified by test)
+* Production guard: server exits at startup if `ACCOUNTS_API_KEY` unset in production
+* API key auth: `Authorization: Bearer` or `X-Api-Key` header on all account-mapping endpoints
+* Contract enforcement: optional `ENFORCE_CONTRACT=true` requires atomic group with GhostPay TEAL app call on every payment
+* CORS: `CORS_ORIGIN` env var — restrict to deployed frontend in production
 
 ---
 
-## 🧩 Smart Contract
+## Smart Contract
 
 **App ID:** `769719989` · **Network:** Algorand Testnet · **AVM version:** 8
 
 The GhostPay approval program enforces atomic payment groups:
 
-- Validates a 2-transaction atomic group: `[payTxn, appCallTxn]`
-- Verifies sender, receiver, and amount match across both transactions
-- Records `last_sender`, `last_receiver`, `last_ts`, `last_amount_micro` in global state
-- Increments `payment_count` on every verified payment
-- Admin-only delete and update operations
+* Validates a 2-transaction atomic group: `[payTxn, appCallTxn]`
+* Verifies sender, receiver, and amount match across both transactions
+* Records `last_sender`, `last_receiver`, `last_ts`, `last_amount_micro` in global state
+* Increments `payment_count` on every verified payment
+* Admin-only delete and update operations
 
 ```bash
 # Deploy contract
 cd backend
 npm run deploy:contract
-
-# On success, GHOSTPAY_CONTRACT_APP_ID is written to backend/.env
 ```
 
+On success, `GHOSTPAY_CONTRACT_APP_ID` is written to `backend/.env`.
+
 ---
 
-## 🌐 All API Endpoints
+## All API Endpoints
 
 ### Health
-| Method | Route | Description |
-|---|---|---|
-| `GET` | `/health` | Service health check |
+
+| Method | Route     | Description          |
+| ------ | --------- | -------------------- |
+| `GET`  | `/health` | Service health check |
 
 ### Algorand
-| Method | Route | Description |
-|---|---|---|
-| `GET` | `/api/algorand/network` | Network config + signer address |
-| `GET` | `/api/algorand/signer` | Server signer wallet address |
-| `GET` | `/api/algorand/balance/:address` | ALGO balance |
-| `GET` | `/api/algorand/assets/:address` | ALGO + ASA holdings |
-| `GET` | `/api/algorand/transactions/:address` | Recent transactions (indexer) |
-| `GET` | `/api/algorand/params` | Offline transaction parameters |
-| `POST` | `/api/algorand/send` | Send ALGO (server-signed / client-signed / contract mode) |
+
+| Method | Route                                 | Description                                               |
+| ------ | ------------------------------------- | --------------------------------------------------------- |
+| `GET`  | `/api/algorand/network`               | Network config + signer address                           |
+| `GET`  | `/api/algorand/signer`                | Signer wallet address                                     |
+| `GET`  | `/api/algorand/balance/:address`      | ALGO balance                                              |
+| `GET`  | `/api/algorand/assets/:address`       | ALGO + ASA holdings                                       |
+| `GET`  | `/api/algorand/transactions/:address` | Recent transactions (indexer)                             |
+| `GET`  | `/api/algorand/params`                | Offline transaction parameters                            |
+| `POST` | `/api/algorand/send`                  | Send ALGO (server-signed / client-signed / contract mode) |
 
 ### Identity
-| Method | Route | Description |
-|---|---|---|
-| `POST` | `/api/identity/request-verification` | Start OTP flow |
-| `POST` | `/api/identity/send-sms-otp` | Send SMS OTP (Twilio) |
-| `POST` | `/api/identity/verify-mobile` | Verify OTP + link wallet |
-| `GET` | `/api/identity/mobile/:mobileNumber/wallets` | Wallets for mobile number |
-| `GET` | `/api/identity/wallet/:walletAddress` | Identity for wallet address |
 
-### Accounts (x402 account-mapping)
-| Method | Route | Description |
-|---|---|---|
-| `POST` | `/api/accounts` | Register phone ↔ walletId ↔ Algorand address |
-| `GET` | `/api/accounts/phone/:phone` | Resolve account by phone |
-| `GET` | `/api/accounts/wallet/:walletId` | Resolve account by walletId |
+| Method | Route                                        | Description                 |
+| ------ | -------------------------------------------- | --------------------------- |
+| `POST` | `/api/identity/request-verification`         | Start OTP flow              |
+| `POST` | `/api/identity/send-sms-otp`                 | Send SMS OTP (Twilio)       |
+| `POST` | `/api/identity/verify-mobile`                | Verify OTP + link wallet    |
+| `GET`  | `/api/identity/mobile/:mobileNumber/wallets` | Wallets for mobile number   |
+| `GET`  | `/api/identity/wallet/:walletAddress`        | Identity for wallet address |
+
+### Accounts
+
+| Method | Route                            | Description                                  |
+| ------ | -------------------------------- | -------------------------------------------- |
+| `POST` | `/api/accounts`                  | Register phone ↔ walletId ↔ Algorand address |
+| `GET`  | `/api/accounts/phone/:phone`     | Resolve account by phone                     |
+| `GET`  | `/api/accounts/wallet/:walletId` | Resolve account by walletId                  |
 
 ### x402
-| Method | Route | Payment | Description |
-|---|---|---|---|
-| `GET` | `/api/x402/status` | None | x402 config + facilitator online check |
-| `GET` | `/api/x402/payment-required` | None | Raw PaymentRequired object |
-| `POST` | `/api/x402/pay` | $0.10 USDC | Send ALGO payment (x402-gated) |
-| `GET` | `/api/x402/pay` | $0.10 USDC | Premium transaction params (x402-gated) |
+
+| Method | Route                        | Payment    | Description                             |
+| ------ | ---------------------------- | ---------- | --------------------------------------- |
+| `GET`  | `/api/x402/status`           | None       | x402 config + facilitator online check  |
+| `GET`  | `/api/x402/payment-required` | None       | Raw PaymentRequired object              |
+| `POST` | `/api/x402/pay`              | $0.10 USDC | Send ALGO payment (x402-gated)          |
+| `GET`  | `/api/x402/pay`              | $0.10 USDC | Premium transaction params (x402-gated) |
 
 ### Security
-| Method | Route | Payment | Description |
-|---|---|---|---|
-| `GET` | `/api/security/status` | None | Security service config |
-| `GET` | `/api/security/payment-required` | None | PaymentRequired for wallet-risk |
-| `POST` | `/api/security/wallet-risk` | $0.10 USDC | AI-agent wallet risk analysis |
+
+| Method | Route                            | Payment    | Description                     |
+| ------ | -------------------------------- | ---------- | ------------------------------- |
+| `GET`  | `/api/security/status`           | None       | Security service config         |
+| `GET`  | `/api/security/payment-required` | None       | PaymentRequired for wallet-risk |
+| `POST` | `/api/security/wallet-risk`      | $0.10 USDC | AI-agent wallet risk analysis   |
 
 ---
 
-## 🚀 Local Setup
+## Local Setup
+
+### 1. Clone and install
 
 ```bash
-# 1. Clone and install
 git clone <repo>
 npm install
+```
 
-# 2. Backend config
+### 2. Backend configuration
+
+```bash
 cp backend/.env.example backend/.env
-# Edit backend/.env — set MONGODB_URI and ALGORAND_SENDER_MNEMONIC
+```
 
-# 3. Run backend
+Edit `backend/.env` and set:
+
+```env
+MONGODB_URI=<mongodb_atlas_uri>
+ALGORAND_SENDER_MNEMONIC=<25-word mnemonic>
+```
+
+### 3. Run backend
+
+```bash
 cd backend
-npm run dev          # http://localhost:4000
-                     # Swagger: http://localhost:4000/api/docs
+npm run dev
+```
 
-# 4. Run frontend (separate terminal)
+Backend:
+
+```text
+http://localhost:4000
+```
+
+Swagger:
+
+```text
+http://localhost:4000/api/docs
+```
+
+### 4. Run frontend
+
+Open a separate terminal:
+
+```bash
 cd app
 npm install
-npm run web          # http://localhost:8081
+npm run web
+```
 
-# 5. Deploy contract (optional)
+Frontend:
+
+```text
+http://localhost:8081
+```
+
+### 5. Deploy contract
+
+```bash
 cd backend
 npm run deploy:contract
+```
 
-# 6. Opt into USDC
+### 6. Opt into USDC
+
+```bash
 npm run opt-in-usdc
+```
 
-# 7. Run tests
-npm test             # 207/207 passing
+### 7. Run tests
 
-# 8. Run x402 demo
+```bash
+npm test
+```
+
+Expected result:
+
+```text
+207 passed
+```
+
+### 8. Run x402 demo
+
+```bash
 npm run demo:x402
 ```
 
 ---
 
-## 📋 Environment Variables
+## Environment Variables
 
 ```env
 # Core
@@ -529,15 +597,15 @@ ALGORAND_NETWORK=testnet
 ALGORAND_ALGOD_SERVER=https://testnet-api.algonode.cloud
 ALGORAND_SENDER_MNEMONIC=<25-word mnemonic>
 
-# Contract (set by deploy:contract script)
+# Contract
 GHOSTPAY_CONTRACT_APP_ID=769719989
 ENFORCE_CONTRACT=true
 
-# x402 (GoPlausible)
+# x402
 X402_FACILITATOR_URL=https://facilitator.goplausible.xyz
 X402_PRICE_CENTS=10
 
-# Identity (optional)
+# Identity
 SMS_PROVIDER=twilio
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
@@ -549,16 +617,18 @@ ACCOUNTS_API_KEY=<strong secret — required in production>
 
 ---
 
-## 📌 What GhostPay is — and isn't
+## What GhostPay Is — and Isn't
 
-**Is:**
-- A working x402 v2 implementation on Algorand Testnet using `@x402/avm` and GoPlausible
-- A real Express backend with 207 passing tests and 0 TypeScript errors
-- A deployed Expo web app at [ghost-pay-psi.vercel.app](https://ghost-pay-psi.vercel.app)
-- A deployed backend at [ghpay.vercel.app](https://ghpay.vercel.app) (older build without x402 routes)
-- A deployed Algorand smart contract at App ID `769719989` on Testnet
-- A working payment wallet for offline-first ALGO transfers with mobile identity
+### Is
 
-**Awaiting:**
-- Testnet USDC balance on `TFWA7LW2S2XV74WV36IZ5ZFS6Z3UP63F6QQGPFPWZMLO6SD3BKC5VPWDIU` to complete end-to-end settlement
-- Re-deployment of the backend to expose x402 and security routes publicly
+* A working x402 v2 implementation on Algorand Testnet using `@x402/avm` and GoPlausible
+* A real Express backend with 207 passing tests and 0 TypeScript errors
+* A deployed Expo web app at `ghost-pay-psi.vercel.app`
+* A deployed backend at `ghpay.vercel.app` (older build without x402 routes)
+* A deployed Algorand smart contract at App ID `769719989` on Testnet
+* A working payment wallet for offline-first ALGO transfers with mobile identity
+
+### Awaiting
+
+* Testnet USDC balance on `TFWA7LW2S2XV74WV36IZ5ZFS6Z3UP63F6QQGPFPWZMLO6SD3BKC5VPWDIU` to complete end-to-end settlement
+* Re-deployment of the backend to expose x402 and security routes publicly
