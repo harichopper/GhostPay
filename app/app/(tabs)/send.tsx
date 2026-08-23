@@ -79,7 +79,8 @@ export function parsePaymentQr(qrData: string) {
 
 const isPhoneLike = (value: string) => {
   const cleaned = value.trim();
-  return cleaned.length > 0 && cleaned.replace(/\D/g, '').length >= 8 && cleaned.length < 50 && !cleaned.startsWith('0x');
+  const digitCount = cleaned.replace(/\D/g, '').length;
+  return cleaned.length > 0 && digitCount >= 10 && digitCount <= 15 && cleaned.length < 20 && !cleaned.startsWith('0x');
 };
 
 const isValidAlgorandAddress = (value: string) => {
@@ -218,7 +219,7 @@ export default function SendScreen() {
       return;
     }
 
-    const isPhone = cleanInput.replace(/\D/g, '').length >= 8 && !cleanInput.startsWith('0x') && cleanInput.length < 50;
+    const isPhone = isPhoneLike(cleanInput);
     if (isPhone) {
       setIsResolvingRecipient(true);
       try {
@@ -232,37 +233,46 @@ export default function SendScreen() {
           });
         } else {
           setRecipientIdentity({
-            verified: false
+            verified: false,
+            name: 'This mobile number is not linked to a verified GhostPay wallet'
           });
         }
       } catch (err) {
-        setRecipientIdentity(null);
+        setRecipientIdentity({
+          verified: false,
+          name: 'Unable to verify this mobile number'
+        });
       } finally {
         setIsResolvingRecipient(false);
       }
-    } else if (cleanInput.length >= 50) {
+    } else if (isValidAlgorandAddress(cleanInput)) {
       setIsResolvingRecipient(true);
       try {
         const res = await lookupIdentityByWallet(cleanInput);
         if (res && res.identity && res.identity.verified) {
           setRecipientIdentity({
             name: res.identity.name || 'Verified Vault Member',
-            verified: true,
-            primaryAddress: cleanInput
+            verified: true
           });
         } else {
           setRecipientIdentity({
             verified: true,
-            primaryAddress: cleanInput
+            name: 'Valid Algorand address'
           });
         }
       } catch (err) {
-        setRecipientIdentity(null);
+        setRecipientIdentity({
+          verified: true,
+          name: 'Valid Algorand address'
+        });
       } finally {
         setIsResolvingRecipient(false);
       }
     } else {
-      setRecipientIdentity(null);
+      setRecipientIdentity({
+        verified: false,
+        name: 'Not a valid Algorand address'
+      });
     }
   };
 
@@ -761,20 +771,15 @@ export default function SendScreen() {
                     ) : recipientIdentity ? (
                       <View style={[styles.recipientBadgeCard, recipientIdentity.verified ? styles.badgeVerified : styles.badgeUnverified]}>
                         <Ionicons
-                          name={recipientIdentity.verified ? 'shield-checkmark' : 'time-outline'}
+                          name={recipientIdentity.verified ? 'shield-checkmark' : 'alert-circle'}
                           size={18}
-                          color={recipientIdentity.verified ? '#027A48' : '#B54708'}
+                          color={recipientIdentity.verified ? '#027A48' : '#D92D20'}
                           style={{ marginRight: 8 }}
                         />
                         <View style={{ flex: 1 }}>
-                          <Text style={[styles.badgeTitle, { color: recipientIdentity.verified ? '#027A48' : '#B54708' }]}>
-                            {recipientIdentity.name ? recipientIdentity.name : (recipientIdentity.verified ? 'Verified Vault Member' : 'Unlinked Mobile Number')}
+                          <Text style={[styles.badgeTitle, { color: recipientIdentity.verified ? '#027A48' : '#D92D20' }]}> 
+                            {recipientIdentity.name || (recipientIdentity.verified ? 'Verified Vault Member' : 'Recipient cannot be used')}
                           </Text>
-                          {Boolean(recipientIdentity.primaryAddress) && (
-                            <Text style={styles.badgeSub} numberOfLines={1} ellipsizeMode="middle">
-                              Address: {recipientIdentity.primaryAddress}
-                            </Text>
-                          )}
                         </View>
                       </View>
                     ) : null}
