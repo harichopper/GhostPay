@@ -29,6 +29,8 @@ const EXPECTED_ROUTES: string[] = [
   'GET /api/algorand/signer',
   'GET /api/algorand/balance/{address}',
   'GET /api/algorand/assets/{address}',
+  'GET /api/algorand/transactions/{address}',
+  'GET /api/algorand/params',
   'POST /api/algorand/send',
 
   // Identity
@@ -153,7 +155,9 @@ describe('OpenAPI spec coverage audit', () => {
 
   it('all $ref values point to existing schema components', () => {
     const specJson = JSON.stringify(spec);
-    const refs = [...specJson.matchAll(/"\\$ref"\s*:\s*"#\/components\/schemas\/([^"]+)"/g)]
+    // Match "$ref": "#/components/schemas/SchemaName" in the serialised JSON.
+    // In JSON the dollar sign is not escaped, so the literal text is "$ref".
+    const refs = [...specJson.matchAll(/"\$ref"\s*:\s*"#\/components\/schemas\/([^"]+)"/g)]
       .map(m => m[1]);
 
     const definedSchemas = Object.keys(spec.components?.schemas ?? {});

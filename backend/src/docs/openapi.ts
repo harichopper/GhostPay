@@ -16,6 +16,8 @@
  *     GET  /api/algorand/signer
  *     GET  /api/algorand/balance/:address
  *     GET  /api/algorand/assets/:address
+ *     GET  /api/algorand/transactions/:address
+ *     GET  /api/algorand/params              ← offline transaction parameters
  *     POST /api/algorand/send
  *
  *   Identity
@@ -266,7 +268,27 @@ export function buildOpenApiSpec(): OpenAPIV3.Document {
             receiver:        { type: 'string', description: 'Receiver Algorand address', example: '6XPKERRH7SRNUUOULNHEGJENORE2Y537ZDYTUA5O4TRIGXRZQ5ML6LMXLY' },
             amount:          { type: 'number', description: 'Amount in ALGO (max 6 decimal places)', example: 1.5 },
             timestamp:       { type: 'string', description: 'ISO 8601 timestamp used as transaction note marker', example: '2026-08-19T10:00:00.000Z' },
-            signedTxnBase64: { type: 'string', description: 'Pre-signed transaction in base64 (client-signed mode). Omit to use server signer.' },
+            signedTxnBase64: {
+              type: 'string',
+              description: [
+                'Pre-signed single payment transaction in base64 (client-signed mode, no contract).',
+                'Omit to use server signer.',
+                'The transaction note MUST start with `GhostPay:<timestamp>`.',
+              ].join(' ')
+            },
+            signedGroupTxnsBase64: {
+              type: 'array',
+              items: { type: 'string' },
+              minItems: 2,
+              maxItems: 2,
+              description: [
+                'Pre-signed atomic group for contract mode: `[payTxnBase64, appCallTxnBase64]`.',
+                'Use when `contractEnabled=true` (GHOSTPAY_CONTRACT_APP_ID is configured).',
+                'Build the group offline using params from `GET /api/algorand/params`,',
+                'assign group ID with `algosdk.assignGroupID`, sign both, and submit here.',
+                'App-call args must be `["record", timestamp, amount_uint64_be]`.',
+              ].join(' ')
+            },
             demoMode:        { type: 'boolean', description: 'If true, return a fake txId without broadcasting. Only allowed when ALLOW_DEMO_MODE=true.', example: false }
           }
         } satisfies OpenAPIV3.SchemaObject,
@@ -280,6 +302,32 @@ export function buildOpenApiSpec(): OpenAPIV3.Document {
             explorerUrl:      { type: 'string', description: 'Link to view the transaction in the Algorand explorer', example: 'https://testnet.explorer.perawallet.app/tx/ABCDEF...' },
             network:          { type: 'string', enum: ['testnet', 'mainnet'], example: 'testnet' },
             contractVerified: { type: 'boolean', description: 'Whether the transaction was verified by the GhostPay smart contract', example: false }
+          }
+        } satisfies OpenAPIV3.SchemaObject,
+
+        /**
+         * Response schema for GET /api/algorand/params.
+         * All fields needed to construct and sign Algorand transactions offline.
+         */
+        PaymentParamsResponse: {
+          type: 'object',
+          required: [
+            'network', 'genesisId', 'genesisHashB64',
+            'firstValidRound', 'lastValidRound', 'minFee',
+            'contractAppId', 'contractEnabled',
+            'validityWindowRounds', 'fetchedAt'
+          ],
+          properties: {
+            network:              { type: 'string', enum: ['testnet', 'mainnet'], description: 'Algorand network', example: 'testnet' },
+            genesisId:            { type: 'string', description: 'Genesis block identifier', example: 'testnet-v1.0' },
+            genesisHashB64:       { type: 'string', description: 'Base64-encoded genesis hash. Decode with Buffer.from(genesisHashB64, "base64") before passing to algosdk.', example: 'SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=' },
+            firstValidRound:      { type: 'integer', description: 'First valid round for transactions built from these params', example: 47000000 },
+            lastValidRound:       { type: 'integer', description: 'Last valid round — transactions expire after this round', example: 47001000 },
+            minFee:               { type: 'integer', description: 'Minimum transaction fee in microALGO (typically 1000)', example: 1000 },
+            contractAppId:        { type: 'integer', description: 'GhostPay contract application ID (0 = contract disabled)', example: 0 },
+            contractEnabled:      { type: 'boolean', description: 'Whether the GhostPay smart contract is enabled for payments', example: false },
+            validityWindowRounds: { type: 'integer', description: 'Number of rounds the params are valid for (lastValidRound - firstValidRound)', example: 1000 },
+            fetchedAt:            { type: 'string', format: 'date-time', description: 'ISO 8601 timestamp when these params were fetched from the Algorand node', example: '2026-08-23T10:00:00.000Z' }
           }
         } satisfies OpenAPIV3.SchemaObject
       }
@@ -436,6 +484,109 @@ export function buildOpenApiSpec(): OpenAPIV3.Document {
             },
             '500': {
               description: 'Unable to fetch assets from Algorand node',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+            }
+          }
+        }
+      },
+
+      '/api/algorand/transactions/{address}': {
+        get: {
+          tags: ['Algorand'],
+          operationId: 'getAlgorandTransactions',
+          summary: 'Get recent transactions for an address',
+          description: 'Returns the last 35 transactions for the given Algorand address, fetched from the Algonode indexer. Each transaction is normalized to a consistent shape.',
+          parameters: [
+            {
+              name: 'address',
+              in: 'path',
+              required: true,
+              description: 'Algorand account address',
+              schema: { type: 'string', example: 'TEK5RKWGNATWM2XDLDINNFIXWGHO5ZF5PPO4W3J56OGLSQKLPFFTY2RKZ4' }
+            }
+          ],
+          responses: {
+            '200': {
+              description: 'Transaction list (may be empty if indexer is unavailable)',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['transactions'],
+                    properties: {
+                      transactions: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          required: ['id', 'sender', 'receiver', 'amount', 'timestamp', 'status', 'txHash', 'explorerUrl', 'network'],
+                          properties: {
+                            id:          { type: 'string', example: 'ABCDEF1234567890' },
+                            sender:      { type: 'string', example: 'TEK5RKWGNATWM2XDLDINNFIXWGHO5ZF5PPO4W3J56OGLSQKLPFFTY2RKZ4' },
+                            receiver:    { type: 'string', example: '6XPKERRH7SRNUUOULNHEGJENORE2Y537ZDYTUA5O4TRIGXRZQ5ML6LMXLY' },
+                            amount:      { type: 'number', example: 1.5 },
+                            timestamp:   { type: 'string', format: 'date-time', example: '2026-08-23T10:00:00.000Z' },
+                            status:      { type: 'string', example: 'confirmed' },
+                            txHash:      { type: 'string', example: 'ABCDEF1234567890' },
+                            explorerUrl: { type: 'string', example: 'https://testnet.explorer.perawallet.app/tx/ABCDEF1234567890' },
+                            network:     { type: 'string', enum: ['testnet', 'mainnet'], example: 'testnet' }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            '400': {
+              description: 'Invalid Algorand address',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+            },
+            '500': {
+              description: 'Unable to fetch transactions',
+              content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
+            }
+          }
+        }
+      },
+
+      '/api/algorand/params': {
+        get: {
+          tags: ['Algorand'],
+          operationId: 'getPaymentParams',
+          summary: 'Get Algorand transaction parameters for offline construction',
+          description: [
+            'Returns the minimum Algorand network parameters required to construct and sign',
+            'transactions completely offline on the client.',
+            '',
+            '**Offline flow:**',
+            '1. Call `GET /api/algorand/params` while online — cache the response.',
+            '2. While offline, build transactions using `genesisId`, `genesisHashB64`,',
+            '   `firstValidRound`/`lastValidRound` as the validity window, and `minFee`.',
+            '3. If `contractEnabled` is true, build an atomic group of 2 transactions:',
+            '   `[payTxn, appCallTxn]`, assign group ID, and sign both.',
+            '4. When back online, submit via `POST /api/algorand/send`.',
+            '',
+            '**Validity window:** `lastValidRound - firstValidRound` rounds.',
+            'On Algorand testnet each round is ~3.9 seconds — the default window is',
+            '~1000 rounds ≈ 65 minutes. Re-fetch params before the window expires.',
+            '',
+            '**genesisHashB64:** base64-encoded genesis hash.',
+            'Reconstruct as: `new Uint8Array(Buffer.from(genesisHashB64, "base64"))`',
+            'when building transactions with algosdk.',
+            '',
+            '**No secrets are returned by this endpoint.**',
+          ].join('\n'),
+          responses: {
+            '200': {
+              description: 'Transaction parameters',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/PaymentParamsResponse' }
+                }
+              }
+            },
+            '503': {
+              description: 'Algorand node unavailable',
               content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } }
             }
           }

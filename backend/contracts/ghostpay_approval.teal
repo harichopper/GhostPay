@@ -1,4 +1,17 @@
 #pragma version 8
+// ─────────────────────────────────────────────────────────────────────────────
+// GhostPay Approval Program  (AVM v8)
+//
+// Global state schema:
+//   Ints   (3): payment_count, last_amount_micro, _reserved
+//   Bytes  (4): admin, last_sender, last_receiver, last_ts
+//
+// Operations:
+//   Create  — store deployer as admin, zero counters
+//   Delete  — admin only
+//   Update  — admin only
+//   NoOp    — "record" call: validate atomic payment + record metadata
+// ─────────────────────────────────────────────────────────────────────────────
 
 txn ApplicationID
 int 0
@@ -20,9 +33,11 @@ int NoOp
 ==
 bnz no_op
 
+// Reject anything else (OptIn, CloseOut)
 int 0
 return
 
+// ── create ───────────────────────────────────────────────────────────────────
 create:
 byte "admin"
 txn Sender
@@ -32,9 +47,14 @@ byte "payment_count"
 int 0
 app_global_put
 
+byte "last_amount_micro"
+int 0
+app_global_put
+
 int 1
 return
 
+// ── delete (admin only) ──────────────────────────────────────────────────────
 delete:
 byte "admin"
 app_global_get
@@ -42,6 +62,7 @@ txn Sender
 ==
 return
 
+// ── update (admin only) ──────────────────────────────────────────────────────
 update:
 byte "admin"
 app_global_get
@@ -49,52 +70,77 @@ txn Sender
 ==
 return
 
+// ── no_op: "record" ─────────────────────────────────────────────────────────
+//
+// Expects an atomic group of exactly 2 transactions:
+//   [0] pay  — the ALGO payment  (signer → receiver)
+//   [1] appl — this NoOp call    (must be group index 1)
+//
+// App args:
+//   [0] "record"         (operation selector)
+//   [1] <timestamp>      (ISO string, stored as last_ts)
+//   [2] <amount_micro>   (uint64 microALGO, must equal gtxn[0].Amount)
+//
+// Foreign accounts:
+//   Accounts[1] = intended receiver (must equal gtxn[0].Receiver)
+// ─────────────────────────────────────────────────────────────────────────────
 no_op:
+// Exactly 3 app args
 txn NumAppArgs
 int 3
 ==
 assert
 
+// First arg must be "record"
 txna ApplicationArgs 0
 byte "record"
 ==
 assert
 
+// Atomic group must have exactly 2 transactions
 global GroupSize
 int 2
 ==
 assert
 
+// This app call must be the SECOND transaction (index 1)
 txn GroupIndex
 int 1
 ==
 assert
 
+// First transaction must be a payment
 gtxn 0 TypeEnum
 int pay
 ==
 assert
 
+// Payment sender must match app call sender
 gtxn 0 Sender
 txn Sender
 ==
 assert
 
+// Exactly one foreign account provided (the receiver)
 txn NumAccounts
 int 1
 ==
 assert
 
+// Payment receiver must match the declared foreign account
 gtxn 0 Receiver
 txna Accounts 1
 ==
 assert
 
+// Declared amount (arg[2]) must match actual payment amount
 txna ApplicationArgs 2
 btoi
 gtxn 0 Amount
 ==
 assert
+
+// ── Record metadata in global state ─────────────────────────────────────────
 
 byte "last_sender"
 gtxn 0 Sender
@@ -104,14 +150,17 @@ byte "last_receiver"
 gtxn 0 Receiver
 app_global_put
 
-byte "last_amount"
-gtxn 0 Amount
-app_global_put
-
 byte "last_ts"
 txna ApplicationArgs 1
 app_global_put
 
+// Store amount as integer
+byte "last_amount_micro"
+txna ApplicationArgs 2
+btoi
+app_global_put
+
+// Increment payment counter
 byte "payment_count"
 byte "payment_count"
 app_global_get

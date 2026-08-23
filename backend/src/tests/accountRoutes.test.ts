@@ -23,7 +23,8 @@ vi.mock('../config/env.js', () => ({
 // Mock database check — pretend Mongo is configured
 // ---------------------------------------------------------------------------
 vi.mock('../db/mongo.js', () => ({
-  isMongoConfigured: () => true
+  isMongoConfigured: () => true,
+  connectMongo: () => Promise.resolve()
 }));
 
 // ---------------------------------------------------------------------------
