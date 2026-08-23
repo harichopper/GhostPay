@@ -42,6 +42,37 @@
 import type { OpenAPIV3 } from 'openapi-types';
 import { env } from '../config/env.js';
 
+/**
+ * Build the OpenAPI servers list.
+ * On Vercel (or any host that sets VERCEL_URL / API_BASE_URL), the deployed
+ * URL is listed first so Swagger UI "Try it out" works in production.
+ * localhost is always appended as a fallback for local development.
+ */
+function buildServerList(port: number): OpenAPIV3.ServerObject[] {
+  const servers: OpenAPIV3.ServerObject[] = [];
+
+  // Explicit override (set API_BASE_URL in Vercel env vars)
+  if (process.env.API_BASE_URL) {
+    servers.push({ url: process.env.API_BASE_URL, description: 'Production' });
+  }
+
+  // Vercel auto-injects VERCEL_URL (no protocol, no trailing slash)
+  if (process.env.VERCEL_URL) {
+    servers.push({
+      url: `https://${process.env.VERCEL_URL}`,
+      description: 'Vercel deployment'
+    });
+  }
+
+  // Always include localhost so local dev still works
+  servers.push({
+    url: `http://localhost:${port}`,
+    description: 'Local development'
+  });
+
+  return servers;
+}
+
 export function buildOpenApiSpec(): OpenAPIV3.Document {
   return {
     openapi: '3.0.3',
@@ -75,12 +106,7 @@ export function buildOpenApiSpec(): OpenAPIV3.Document {
       }
     },
 
-    servers: [
-      {
-        url: `http://localhost:${env.port}`,
-        description: 'Local development server'
-      }
-    ],
+    servers: buildServerList(env.port),
 
     tags: [
       { name: 'Health',    description: 'Service health check' },
