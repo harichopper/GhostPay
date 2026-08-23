@@ -73,7 +73,9 @@ export default function SettingsScreen() {
     generateWalletAddress,
     displayCurrency,
     setDisplayCurrency,
-    userName
+    userName,
+    pushNotificationsEnabled,
+    setPushNotificationsEnabled
   } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
@@ -696,8 +698,15 @@ export default function SettingsScreen() {
                   <Text style={styles.settingLabel}>Push Payment Alerts</Text>
                 </View>
                 <Switch
-                  value={notificationsEnabled}
-                  onValueChange={setNotificationsEnabled}
+                  value={pushNotificationsEnabled}
+                  onValueChange={(val) => {
+                    setPushNotificationsEnabled(val);
+                    Toast.show({
+                      type: 'info',
+                      text1: val ? 'Push Alerts Enabled' : 'Push Alerts Disabled',
+                      text2: val ? 'You will receive local push notifications' : 'Payment push alerts turned off'
+                    });
+                  }}
                   trackColor={{ false: 'rgba(23, 43, 62, 0.15)', true: colors.secondary }}
                   thumbColor={colors.white}
                 />
