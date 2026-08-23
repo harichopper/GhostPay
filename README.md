@@ -46,18 +46,30 @@ GhostPay is an Algorand-native payment wallet with an x402 HTTP payment protocol
 
 ---
 
-## Real Algorand x402 Transaction
+## 🔗 Real Algorand Testnet Transactions
 
-> Live transaction evidence pending final Testnet run.
->
-> The demo script (`npm run demo:x402`) completes steps 1–3 live against GoPlausible Testnet today:
->
-> * HTTP 402 with correct x402 v2 PaymentRequired
-> * USDC payment payload built and signed offline with `@x402/avm ExactAvmScheme`
-> * GoPlausible `/verify` reached — returns simulation result
-> * GoPlausible `/settle` — pending USDC balance
->
-> Once the wallet is funded, `npm run demo:x402` produces a real settlement TxId verifiable on Lora.
+The following transactions were created from the configured signer wallet and confirmed on Algorand Testnet. Each ALGO transfer used GhostPay's contract-backed payment path.
+
+**Sender:** `TFWA7LW2S2XV74WV36IZ5ZFS6Z3UP63F6QQGPFPWZMLO6SD3BKC5VPWDIU`
+
+**Receiver:** `2SY7GCPC3QGLIAOPPZ33VY7FMN6WFVSISTVPEMVL6YX6KXNZ65NCQS66TY`
+
+| # | Asset | Amount | Confirmed round | Transaction | Explorer |
+|---|---|---:|---:|---|---|
+| 1 | ALGO | 0.1 | 66589877 | `SWLSRZYE5REFLYYRN4RYRPT2HQL24IRGIRC4L5OFDFM7YIRTHT4Q` | [Lora](https://lora.algokit.io/testnet/transaction/SWLSRZYE5REFLYYRN4RYRPT2HQL24IRGIRC4L5OFDFM7YIRTHT4Q) |
+| 2 | ALGO | 0.2 | 66589879 | `WRMKDPCXDQOYUW5J4TM4ZEZKZQSRHBIT67UINXCAL5GWJZCXBUFA` | [Lora](https://lora.algokit.io/testnet/transaction/WRMKDPCXDQOYUW5J4TM4ZEZKZQSRHBIT67UINXCAL5GWJZCXBUFA) |
+| 3 | ALGO | 0.3 | 66589881 | `EA5EAVE24SVEIDG6IURZ6NFECHLUD6I3RNTUZROQCLHAA2SVJFXQ` | [Lora](https://lora.algokit.io/testnet/transaction/EA5EAVE24SVEIDG6IURZ6NFECHLUD6I3RNTUZROQCLHAA2SVJFXQ) |
+| 4 | ALGO | 0.4 | 66589883 | `2RHSAYP3ICKWD6HJQGJ2IYEGQ636KLSQ6PFMLLSKBFAYOSDLGTRA` | [Lora](https://lora.algokit.io/testnet/transaction/2RHSAYP3ICKWD6HJQGJ2IYEGQ636KLSQ6PFMLLSKBFAYOSDLGTRA) |
+
+### GoPlausible Facilitator Settlement
+
+The x402 demo also created a separate real USDC settlement through GoPlausible. This is the facilitator payment record; it is separate from the four ALGO wallet transfers above.
+
+| Facilitator | Asset | Amount | Settlement transaction | Explorer |
+|---|---|---:|---|---|
+| [GoPlausible](https://facilitator.goplausible.xyz) | USDC ASA 10458941 | 0.10 USDC | `TR2KHWJE2SMHAKZJV4PZKGQU72UAKO46UDEWMWYIVBFNMBI75BMA` | [Lora](https://lora.algokit.io/testnet/transaction/TR2KHWJE2SMHAKZJV4PZKGQU72UAKO46UDEWMWYIVBFNMBI75BMA) |
+
+Settlement time: `2026-08-23T11:12:33.933Z`
 
 **Payer wallet (opted in, awaiting USDC):**
 

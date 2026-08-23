@@ -239,6 +239,11 @@ export default function ProfileScreen() {
       return;
     }
 
+    if (!walletAddress) {
+      setOtpError('Connect or create a wallet before verifying your mobile number');
+      return;
+    }
+
     const fullMobileNumber = getFullMobileNumber();
 
     setLoading(true);
