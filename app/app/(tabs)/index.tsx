@@ -171,6 +171,15 @@ export default function HomeScreen() {
     }).length;
   }, [transactions, walletAddress, notificationsClearedAt, readTxIds]);
 
+  const activeWalletTransactions = useMemo(() => {
+    const activeAddress = walletAddress?.toLowerCase();
+    if (!activeAddress) return [];
+
+    return (transactions || []).filter((tx) =>
+      tx.sender?.toLowerCase() === activeAddress || tx.receiver?.toLowerCase() === activeAddress
+    );
+  }, [transactions, walletAddress]);
+
   // Onboarding local state if wallet is not connected
   const [loading, setLoading] = useState(false);
   const [onboardingMode, setOnboardingMode] = useState<'welcome' | 'import'>('welcome');
@@ -603,14 +612,14 @@ export default function HomeScreen() {
 
               {/* Dynamic Recent Transactions Preview */}
               <View>
-                {!transactions || transactions.length === 0 ? (
+                {activeWalletTransactions.length === 0 ? (
                   <View style={styles.emptyRecentCard}>
                     <Ionicons name="receipt-outline" size={32} color="#98A2B3" style={{ marginBottom: 6 }} />
                     <Text style={styles.emptyRecentTitle}>No Recent Activity</Text>
                     <Text style={styles.emptyRecentSub}>Your payments and transfer transactions will appear here.</Text>
                   </View>
                 ) : (
-                  transactions.slice(0, 4).map((tx) => {
+                  activeWalletTransactions.slice(0, 4).map((tx) => {
                     const isPaid = tx.sender?.toLowerCase() === (walletAddress || '').toLowerCase();
                     const target = isPaid ? (tx.receiver || 'Recipient') : (tx.sender || 'Sender');
                     const isPhone = target.replace(/\D/g, '').length >= 8 && target.length < 50;

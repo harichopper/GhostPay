@@ -34,6 +34,7 @@ export default function ProfileScreen() {
   const {
     walletAddress,
     wallets = [],
+    setWalletAddress,
     isConnected,
     demoMode,
     generateWalletAddress,
@@ -83,6 +84,9 @@ export default function ProfileScreen() {
   const [generatedMnemonic, setGeneratedMnemonic] = useState('');
   const [importMnemonic, setImportMnemonic] = useState('');
   const [walletLabel, setWalletLabel] = useState('');
+  const [isWalletSelectorOpen, setIsWalletSelectorOpen] = useState(false);
+
+  const activeWallet = wallets.find((wallet) => wallet.address === walletAddress);
 
   const handleCreateWallet = async () => {
     setLoading(true);
@@ -131,6 +135,16 @@ export default function ProfileScreen() {
     });
   };
 
+  const handleSelectWallet = (address: string) => {
+    setWalletAddress(address);
+    setIsWalletSelectorOpen(false);
+    Toast.show({
+      type: 'success',
+      text1: 'Wallet Switched',
+      text2: 'This wallet is now active for payments.'
+    });
+  };
+
   const handleDoneBackup = async () => {
     if (generatedMnemonic) {
       await importWalletFromMnemonic(generatedMnemonic, walletLabel || 'Main Wallet');
@@ -155,14 +169,19 @@ export default function ProfileScreen() {
   };
 
   useEffect(() => {
-    if (walletAddress && isOnline) {
-      refreshBalance();
+    if (!walletAddress) return;
+
+    if (isOnline) {
+      void refreshBalance();
     }
   }, [walletAddress, isOnline]);
 
   // Load existing wallet identity from backend on mount
   useEffect(() => {
     async function loadIdentity() {
+      setVerifiedPhone(null);
+      setPhone('');
+
       if (walletAddress && isOnline) {
         try {
           const res = await lookupIdentityByWallet(walletAddress);
@@ -369,18 +388,59 @@ export default function ProfileScreen() {
                 {/* Section: Linked Algorand Wallet details */}
                 <View style={styles.sectionCard}>
                   <Text style={styles.sectionTitle}>ALGORAND WALLET</Text>
-                  <Pressable style={styles.walletRow} onPress={() => handleCopyAddress(walletAddress)}>
+                  <Pressable
+                    style={styles.walletSelectorRow}
+                    onPress={() => setIsWalletSelectorOpen((current) => !current)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Choose active Algorand wallet"
+                  >
                     <View style={styles.walletInfo}>
                       <Ionicons name="wallet-outline" size={22} color={colors.primaryDark} style={{ marginRight: 10 }} />
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.walletLabel}>Primary Wallet</Text>
+                        <Text style={styles.walletLabel}>{activeWallet?.label || 'Active Wallet'}</Text>
                         <Text style={styles.walletAddress} numberOfLines={1} ellipsizeMode="middle">
                           {walletAddress || 'No Wallet Configured'}
                         </Text>
                       </View>
                     </View>
-                    <Ionicons name="copy-outline" size={16} color="#667085" />
+                    <Ionicons
+                      name={isWalletSelectorOpen ? 'chevron-up' : 'chevron-down'}
+                      size={18}
+                      color={colors.primaryDark}
+                    />
                   </Pressable>
+
+                  {isWalletSelectorOpen && wallets.length > 1 && (
+                    <View style={styles.walletDropdown}>
+                      {wallets.map((wallet, idx) => {
+                        const isActive = wallet.address === walletAddress;
+                        return (
+                          <Pressable
+                            key={wallet.address}
+                            style={[styles.walletOption, isActive && styles.walletOptionActive]}
+                            onPress={() => handleSelectWallet(wallet.address)}
+                          >
+                            <View style={styles.walletOptionInfo}>
+                              <Ionicons
+                                name={isActive ? 'checkmark-circle' : 'ellipse-outline'}
+                                size={18}
+                                color={isActive ? colors.secondary : '#98A2B3'}
+                              />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.walletOptionLabel}>
+                                  {wallet.label || `Wallet ${idx + 1}`}
+                                  {isActive ? '  (Active)' : ''}
+                                </Text>
+                                <Text style={styles.walletOptionAddress} numberOfLines={1} ellipsizeMode="middle">
+                                  {wallet.address}
+                                </Text>
+                              </View>
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
 
                   {/* Linked Mobile Identity Row (Embedded in Algorand Wallet Card) */}
                   {Boolean(verifiedPhone) && (
@@ -396,28 +456,6 @@ export default function ProfileScreen() {
                     </>
                   )}
 
-                  {wallets.length > 1 && (
-                    <>
-                      <View style={styles.divider} />
-                      <Text style={styles.sectionTitleSub}>SECONDARY WALLETS</Text>
-                      {wallets
-                        .filter((w) => w.address !== walletAddress)
-                        .map((w, idx) => (
-                          <Pressable key={idx} style={styles.walletRowSub} onPress={() => handleCopyAddress(w.address)}>
-                            <View style={styles.walletInfo}>
-                              <Ionicons name="link-outline" size={18} color="#667085" style={{ marginRight: 10 }} />
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.walletLabelSub}>{w.label || `Wallet ${idx + 2}`}</Text>
-                                <Text style={styles.walletAddressSub} numberOfLines={1} ellipsizeMode="middle">
-                                  {w.address}
-                                </Text>
-                              </View>
-                            </View>
-                            <Ionicons name="copy-outline" size={14} color="#98A2B3" />
-                          </Pressable>
-                        ))}
-                    </>
-                  )}
                 </View>
 
                 {/* My Wallet QR Code Card (Placed below Primary Wallet Card) */}
@@ -826,6 +864,50 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 4
+  },
+  walletSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  walletDropdown: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E4E7EC',
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden'
+  },
+  walletOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F4F7'
+  },
+  walletOptionActive: {
+    backgroundColor: '#ECFDF5'
+  },
+  walletOptionInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10
+  },
+  walletOptionLabel: {
+    color: colors.primaryDark,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold'
+  },
+  walletOptionAddress: {
+    color: '#667085',
+    fontSize: 11,
+    fontFamily: 'Inter_500Medium',
+    marginTop: 2
   },
   walletRowSub: {
     flexDirection: 'row',

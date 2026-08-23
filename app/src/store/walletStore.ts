@@ -281,6 +281,8 @@ export const useWalletStore = create<WalletState>()(
         set((state) => ({
           walletAddress: normalizedAddress,
           wallets: normalizedAddress ? upsertWallet(state.wallets, normalizedAddress) : state.wallets,
+          balanceAlgo: null,
+          lastBalanceRefreshAt: null,
           transactions: state.transactions.filter((tx) => !tx.id.startsWith('demo-'))
         }));
       },
@@ -329,10 +331,16 @@ export const useWalletStore = create<WalletState>()(
 
           await saveWalletSecretKey(address, account.sk);
 
-          set((state) => ({
-            walletAddress: address,
-            wallets: upsertWallet(state.wallets, address, label)
-          }));
+          set((state) => {
+            const hasActiveWallet = Boolean(state.walletAddress);
+
+            return {
+              walletAddress: hasActiveWallet ? state.walletAddress : address,
+              wallets: upsertWallet(state.wallets, address, label),
+              balanceAlgo: hasActiveWallet ? state.balanceAlgo : null,
+              lastBalanceRefreshAt: hasActiveWallet ? state.lastBalanceRefreshAt : null
+            };
+          });
           return { success: true, address };
         } catch (error) {
           return { success: false, error: error instanceof Error ? error.message : 'Invalid mnemonic phrase' };

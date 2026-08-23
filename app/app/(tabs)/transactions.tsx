@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Image,
   Platform,
@@ -124,14 +124,21 @@ const SAMPLE_TRANSACTIONS: SampleTx[] = [
 
 export default function TransactionsScreen() {
   const router = useRouter();
-  const { walletAddress, transactions: storeTransactions, displayCurrency, algoRates } = useWalletStore();
+  const { walletAddress, wallets, transactions: storeTransactions, displayCurrency, algoRates } = useWalletStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchVisible, setIsSearchVisible] = useState(false);
-  const [selectedWalletLabel, setSelectedWalletLabel] = useState('•••• 2872');
+  const [selectedWalletAddress, setSelectedWalletAddress] = useState(walletAddress);
+  const [isWalletDropdownOpen, setIsWalletDropdownOpen] = useState(false);
   const [listKey, setListKey] = useState(0);
 
   const [selectedTx, setSelectedTx] = useState<GhostTransaction | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    setSelectedWalletAddress(walletAddress);
+  }, [walletAddress]);
+
+  const selectedWallet = wallets.find((wallet) => wallet.address === selectedWalletAddress);
 
   const handleOpenDetail = (item: SampleTx) => {
     const matchedStoreTx = storeTransactions?.find((t) => t.id === item.id);
@@ -140,8 +147,8 @@ export default function TransactionsScreen() {
     } else {
       setSelectedTx({
         id: item.id,
-        sender: item.isPositive ? 'GBRNCKUL...CCB2' : (walletAddress || 'GBRNCKUL...CCB2'),
-        receiver: item.isPositive ? (walletAddress || 'GBRNCKUL...CCB2') : 'GBRNCKUL...CCB2',
+        sender: item.isPositive ? 'GBRNCKUL...CCB2' : (selectedWalletAddress || 'GBRNCKUL...CCB2'),
+        receiver: item.isPositive ? (selectedWalletAddress || 'GBRNCKUL...CCB2') : 'GBRNCKUL...CCB2',
         amount: parseFloat(item.amount.replace(/[^0-9.]/g, '')) || 50,
         timestamp: item.dateGroup === 'Today' ? 'Tuesday, Feb 3, 2026 • 11:32 PM' : 'Nov 19, 2025 • 4:15 PM',
         status: 'confirmed',
@@ -159,17 +166,22 @@ export default function TransactionsScreen() {
   );
 
   const formattedWalletAddress = useMemo(() => {
-    if (!walletAddress) return '•••• 2872';
-    return `•••• ${walletAddress.slice(-4)}`;
-  }, [walletAddress]);
+    if (!selectedWalletAddress) return '•••• 2872';
+    return `•••• ${selectedWalletAddress.slice(-4)}`;
+  }, [selectedWalletAddress]);
 
-  const displayWalletText = formattedWalletAddress !== '•••• ' ? formattedWalletAddress : selectedWalletLabel;
+  const displayWalletText = selectedWallet?.label || formattedWalletAddress;
 
   // Show real store transactions for the connected wallet
   const allTxList = useMemo(() => {
-    if (storeTransactions && storeTransactions.length > 0) {
-      const convertedStoreTx: SampleTx[] = storeTransactions.map((tx) => {
-        const isPaid = tx.sender?.toLowerCase() === (walletAddress || '').toLowerCase();
+    const selectedAddress = (selectedWalletAddress || '').toLowerCase();
+    const selectedTransactions = (storeTransactions || []).filter((tx) =>
+      tx.sender?.toLowerCase() === selectedAddress || tx.receiver?.toLowerCase() === selectedAddress
+    );
+
+    if (selectedTransactions.length > 0) {
+      const convertedStoreTx: SampleTx[] = selectedTransactions.map((tx) => {
+        const isPaid = tx.sender?.toLowerCase() === selectedAddress;
         const target = isPaid ? (tx.receiver || 'Recipient') : (tx.sender || 'Sender');
         const isPhone = target.replace(/\D/g, '').length >= 8 && target.length < 50;
         const displayName = isPhone
@@ -234,8 +246,8 @@ export default function TransactionsScreen() {
       });
       return convertedStoreTx;
     }
-    return walletAddress ? [] : SAMPLE_TRANSACTIONS;
-  }, [storeTransactions, walletAddress, displayCurrency, algoRates]);
+    return selectedWalletAddress ? [] : SAMPLE_TRANSACTIONS;
+  }, [storeTransactions, selectedWalletAddress, displayCurrency, algoRates]);
 
   const filteredTxList = useMemo(() => {
     if (!searchQuery.trim()) return allTxList;
@@ -314,15 +326,47 @@ export default function TransactionsScreen() {
 
             {/* Account / Algorand Pill Indicator */}
             <View style={styles.pillWrapper}>
-              <View style={styles.cardPill}>
+              <Pressable
+                style={styles.cardPill}
+                onPress={() => setIsWalletDropdownOpen((current) => !current)}
+                accessibilityRole="button"
+                accessibilityLabel="Choose wallet transaction history"
+              >
                 <Image
                   source={require('../../assets/branding/algorand-logo.webp')}
                   style={styles.algorandPillLogo}
                   resizeMode="contain"
                 />
                 <Text style={styles.cardPillText}>{displayWalletText}</Text>
-                <Ionicons name="chevron-down" size={14} color="rgba(255, 255, 255, 0.7)" style={{ marginLeft: 4 }} />
-              </View>
+                <Ionicons name={isWalletDropdownOpen ? 'chevron-up' : 'chevron-down'} size={14} color="rgba(255, 255, 255, 0.7)" style={{ marginLeft: 4 }} />
+              </Pressable>
+              {isWalletDropdownOpen && wallets.length > 1 && (
+                <View style={styles.walletDropdown}>
+                  {wallets.map((wallet) => {
+                    const isSelected = wallet.address === selectedWalletAddress;
+                    return (
+                      <Pressable
+                        key={wallet.address}
+                        style={[styles.walletOption, isSelected && styles.walletOptionSelected]}
+                        onPress={() => {
+                          setSelectedWalletAddress(wallet.address);
+                          setIsWalletDropdownOpen(false);
+                        }}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.walletOptionLabel}>
+                            {wallet.label || 'Wallet'}{isSelected ? '  (Selected)' : ''}
+                          </Text>
+                          <Text style={styles.walletOptionAddress} numberOfLines={1} ellipsizeMode="middle">
+                            {wallet.address}
+                          </Text>
+                        </View>
+                        {isSelected && <Ionicons name="checkmark-circle" size={18} color={colors.secondary} />}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
             </View>
 
             {/* Grouped Transaction List (ONLY the list animates) */}
@@ -486,6 +530,42 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.15)'
+  },
+  walletDropdown: {
+    width: '86%',
+    marginTop: 6,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#D0D5DD',
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: '#172B3E',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8
+  },
+  walletOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F2F4F7'
+  },
+  walletOptionSelected: {
+    backgroundColor: '#ECFDF5'
+  },
+  walletOptionLabel: {
+    color: colors.primaryDark,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold'
+  },
+  walletOptionAddress: {
+    color: '#667085',
+    fontSize: 11,
+    fontFamily: 'Inter_500Medium',
+    marginTop: 2
   },
   algorandPillLogo: {
     width: 60,
