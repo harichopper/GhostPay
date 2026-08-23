@@ -22,5 +22,5 @@ export async function connectMongo(): Promise<void> {
 }
 
 export function isMongoConfigured(): boolean {
-  return Boolean(env.mongodbUri) && mongoose.connection.readyState === 1;
+  return Boolean(env.mongodbUri);
 }
