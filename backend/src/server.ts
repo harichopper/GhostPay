@@ -52,6 +52,15 @@ app.get('/health', (_request, response) => {
   response.json({ ok: true, service: 'ghostpay-backend' });
 });
 
+app.get('/debug-env', (_request, response) => {
+  response.json({
+    hasMongoUri: Boolean(process.env.MONGODB_URI),
+    mongoUriPrefix: process.env.MONGODB_URI?.slice(0, 20) ?? 'NOT SET',
+    nodeEnv: process.env.NODE_ENV,
+    hasTwilioSid: Boolean(process.env.TWILIO_ACCOUNT_SID)
+  });
+});
+
 app.use('/api/algorand', algorandRouter);
 app.use('/api/identity', identityRouter);
 app.use('/api/accounts', accountRouter);
