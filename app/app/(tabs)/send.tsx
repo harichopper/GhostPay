@@ -33,6 +33,7 @@ import Animated, {
 import Toast from 'react-native-toast-message';
 import { PaymentPinScreen } from '../../src/components/security/PaymentPinScreen';
 import { WalletOnboardingCard } from '../../src/components/WalletOnboardingCard';
+import { useSecurityStore } from '../../src/store/securityStore';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
 import {
@@ -180,6 +181,7 @@ export default function SendScreen() {
   const router = useRouter();
   const isFocused = useIsFocused();
   const { walletAddress, balanceAlgo, enqueueOfflinePayment, isConnected, demoMode, transactions, displayCurrency, algoRates, fetchExchangeRates } = useWalletStore();
+  const appLockEnabled = useSecurityStore((state) => state.appLockEnabled);
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
 
@@ -422,6 +424,13 @@ export default function SendScreen() {
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [isPaymentPinVisible, setIsPaymentPinVisible] = useState(false);
 
+  const clearPaymentForm = () => {
+    setAmount('');
+    setRecipient('');
+    setRecipientIdentity(null);
+    setIsPaymentPinVisible(false);
+  };
+
   const handleConfirmPaymentPress = async () => {
     if (isSubmitting) return;
 
@@ -466,7 +475,12 @@ export default function SendScreen() {
       return;
     }
 
-    setIsPaymentPinVisible(true);
+    if (appLockEnabled) {
+      setIsPaymentPinVisible(true);
+      return;
+    }
+
+    void handleSendPayment();
   };
 
   const handleSendPayment = async () => {
@@ -587,11 +601,10 @@ export default function SendScreen() {
         text1: 'Payment Confirmed!',
         text2: `${numericAmount.toFixed(2)} ALGO sent with 3x x402 AI Protection`
       });
-      setAmount('');
-      setRecipient('');
     } catch (err: any) {
       setErrorModalMessage(err?.message || 'Failed to process payment.');
     } finally {
+      clearPaymentForm();
       setIsSubmitting(false);
       setProcessingStatus(null);
     }
