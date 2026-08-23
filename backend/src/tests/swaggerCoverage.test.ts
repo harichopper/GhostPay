@@ -44,14 +44,20 @@ const EXPECTED_ROUTES: string[] = [
   'POST /api/accounts',
   'GET /api/accounts/phone/{phone}',
   'GET /api/accounts/wallet/{walletId}',
+
+  // x402
+  'GET /api/x402/status',
+  'GET /api/x402/payment-required',
+  'POST /api/x402/pay',
+  'GET /api/x402/pay',
+
+  // Security (x402-gated AI-agent wallet risk analysis)
+  'GET /api/security/status',
+  'GET /api/security/payment-required',
+  'POST /api/security/wallet-risk',
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Convert Express path params (:foo) to OpenAPI style ({foo}) */
-function expressToOpenApi(path: string): string {
-  return path.replace(/:([^/]+)/g, '{$1}');
-}
 
 /** Collect all "METHOD /path" entries from an OpenAPI document */
 function collectSpecRoutes(spec: ReturnType<typeof buildOpenApiSpec>): string[] {
@@ -108,6 +114,8 @@ describe('OpenAPI spec coverage audit', () => {
     expect(tagNames).toContain('Algorand');
     expect(tagNames).toContain('Identity');
     expect(tagNames).toContain('Accounts');
+    expect(tagNames).toContain('x402');
+    expect(tagNames).toContain('Security');
   });
 
   it('spec defines BearerApiKey security scheme', () => {
