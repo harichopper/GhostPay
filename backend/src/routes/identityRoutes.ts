@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { isMongoConfigured } from '../db/mongo.js';
+import { connectMongo, isMongoConfigured } from '../db/mongo.js';
 import {
   getIdentityByWallet,
   getWalletsByMobile,
@@ -9,7 +9,8 @@ import {
 
 export const identityRouter = Router();
 
-identityRouter.use((_request, response, next) => {
+identityRouter.use(async (_request, response, next) => {
+  await connectMongo().catch(() => {});
   if (!isMongoConfigured()) {
     response.status(503).json({ error: 'MongoDB is not configured. Set MONGODB_URI to enable identity features.' });
     return;

@@ -95,17 +95,29 @@ export async function fetchTransactionsFromApi(address: string) {
 }
 
 export async function fetchNotificationsFromApi(address: string) {
-  const response = await fetch(`${API_BASE_URL}/api/notifications/${address}`);
-  const data = await parseApiResponse<{ notifications: any[] }>(response);
-  return data.notifications;
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/notifications/${address}`);
+    const data = await parseApiResponse<{ notifications: any[] }>(response);
+    return data.notifications ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export async function markNotificationReadInApi(id: string) {
-  await fetch(`${API_BASE_URL}/api/notifications/${id}/read`, { method: 'PATCH' });
+  try {
+    await fetch(`${API_BASE_URL}/api/notifications/${id}/read`, { method: 'PATCH' });
+  } catch {
+    // Ignore offline/backend errors
+  }
 }
 
 export async function clearNotificationsInApi(address: string) {
-  await fetch(`${API_BASE_URL}/api/notifications/${address}`, { method: 'DELETE' });
+  try {
+    await fetch(`${API_BASE_URL}/api/notifications/${address}`, { method: 'DELETE' });
+  } catch {
+    // Ignore offline/backend errors
+  }
 }
 
 export async function mintTestAsset(payload: MintAssetPayload): Promise<MintAssetResponse> {
