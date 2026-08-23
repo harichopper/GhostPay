@@ -638,14 +638,18 @@ export default function HomeScreen() {
                     const fiatVal = (tx.amount * rate).toFixed(2);
 
                     const statusBgColor =
-                      tx.status === 'pending'
-                        ? '#F79E1B'
-                        : tx.status === 'syncing'
-                          ? '#2E90FA'
-                          : tx.status === 'failed'
-                            ? '#F04438'
-                            : isPaid
-                              ? '#172B3E'
+                      isPaid
+                        ? tx.status === 'failed'
+                          ? '#F04438'
+                          : tx.status === 'pending' || tx.status === 'syncing'
+                            ? '#F79E1B'
+                            : '#12B76A'
+                        : tx.status === 'pending'
+                          ? '#F79E1B'
+                          : tx.status === 'syncing'
+                            ? '#2E90FA'
+                            : tx.status === 'failed'
+                              ? '#F04438'
                               : '#05DA93';
 
                     const statusIconName: keyof typeof Ionicons.glyphMap =

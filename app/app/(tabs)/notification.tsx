@@ -49,8 +49,9 @@ export default function NotificationScreen() {
     if (transactions && transactions.length > 0) {
       transactions.forEach((tx) => {
         const isPaid = tx.sender?.toLowerCase() === (walletAddress || '').toLowerCase();
+        const isForActiveWallet = tx.receiver?.toLowerCase() === (walletAddress || '').toLowerCase();
         // Only display Receive payments in notifications; skip Send payments
-        if (isPaid) return;
+        if (isPaid || !isForActiveWallet) return;
 
         const target = tx.sender || 'Sender';
         const isPhone = target.replace(/\D/g, '').length >= 8 && target.length < 50;
@@ -127,9 +128,12 @@ export default function NotificationScreen() {
   const [dbNotifications, setDbNotifications] = useState<NotificationItem[]>([]);
 
   useEffect(() => {
+    let isCurrentWallet = true;
+    setDbNotifications([]);
+
     if (walletAddress) {
       void fetchNotificationsFromApi(walletAddress).then((list) => {
-        if (list && list.length > 0) {
+        if (isCurrentWallet && list && list.length > 0) {
           const mapped: NotificationItem[] = list.map((item: any) => ({
             id: item._id || item.id,
             type: item.type || 'system',
@@ -145,6 +149,10 @@ export default function NotificationScreen() {
         }
       });
     }
+
+    return () => {
+      isCurrentWallet = false;
+    };
   }, [walletAddress]);
 
   const [readStateMap, setReadStateMap] = useState<{ [id: string]: boolean }>({});

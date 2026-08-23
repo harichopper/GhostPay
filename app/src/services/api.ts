@@ -1,5 +1,10 @@
 import algosdk from 'algosdk';
+import { Buffer } from 'buffer';
+import { x402Client } from '@x402/core/client';
+import { ExactAvmScheme, ALGORAND_TESTNET_CAIP2, toClientAvmSigner } from '@x402/avm';
+import { wrapFetchWithPayment } from '@x402/fetch';
 import { API_BASE_URL, X402_API_BASE_URL } from '../config/env';
+import { loadWalletSecretKey } from '../storage/walletSecretStorage';
 import type {
   AccountAsset,
   MintAssetPayload,
@@ -29,6 +34,24 @@ async function parseApiResponse<T>(response: Response): Promise<T> {
   }
 
   return data as T;
+}
+
+async function fetchWithX402(senderWallet: string, path: string, body: unknown): Promise<Response> {
+  const secretKey = await loadWalletSecretKey(senderWallet);
+  if (!secretKey) {
+    throw new Error('A secret key is required to pay the X402 security fee. Re-import this wallet using its seed phrase.');
+  }
+
+  const signer = toClientAvmSigner(Buffer.from(secretKey).toString('base64'));
+  const client = new x402Client();
+  client.register(ALGORAND_TESTNET_CAIP2, new ExactAvmScheme(signer));
+
+  const fetchWithPayment = wrapFetchWithPayment(fetch, client);
+  return fetchWithPayment(`${X402_API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
 }
 
 export async function sendTransactionToAlgorand(payload: SendTxPayload): Promise<SendTxResponse> {
@@ -203,33 +226,14 @@ export type WalletRiskResponse = {
   };
 };
 
-export async function fetchWalletRiskScore(senderWallet: string, receiverWallet: string): Promise<WalletRiskResponse> {
-  try {
-    const response = await fetch(`${X402_API_BASE_URL}/api/security/wallet-risk`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ senderWallet, receiverWallet })
-    });
-    return parseApiResponse<WalletRiskResponse>(response);
-  } catch {
-    return {
-      success: true,
-      message: 'AI Preflight Security Check Passed (Zero-Data Vault)',
-      data: {
-        senderWallet,
-        riskScore: 5,
-        riskLevel: 'LOW',
-        canMakePayment: true,
-        verificationChecks: {
-          walletExists: true,
-          walletActive: true,
-          sufficientBalance: true,
-          paymentPermission: true,
-          suspiciousActivity: false
-        }
-      }
-    };
-  }
+export async function fetchWalletRiskScore(senderWallet: string, receiverWallet: string, amount: number, asset = 'ALGO'): Promise<WalletRiskResponse> {
+  const response = await fetchWithX402(senderWallet, '/api/v1/security/wallet-risk', {
+    senderWallet,
+    receiverWallet,
+    amount,
+    asset
+  });
+  return parseApiResponse<WalletRiskResponse>(response);
 }
 
 export type ReceiverValidationResponse = {
@@ -243,20 +247,14 @@ export type ReceiverValidationResponse = {
 };
 
 export async function validateReceiverMerchant(receiverWallet: string, senderWallet?: string): Promise<ReceiverValidationResponse> {
-  try {
-    const response = await fetch(`${X402_API_BASE_URL}/api/security/receiver-validation`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ receiverWallet, senderWallet })
-    });
-    return parseApiResponse<ReceiverValidationResponse>(response);
-  } catch {
-    return {
-      success: true,
-      message: 'Receiver Validation Passed (Zero-Data Vault)',
-      data: { merchantVerified: true, merchantTier: 'VERIFIED_MEMBER', trustScore: 95 }
-    };
+  if (!senderWallet) {
+    throw new Error('Sender wallet is required for X402 merchant verification.');
   }
+  const response = await fetchWithX402(senderWallet, '/api/v1/security/receiver-validation', {
+    receiverWallet,
+    senderWallet
+  });
+  return parseApiResponse<ReceiverValidationResponse>(response);
 }
 
 export type TransactionAnalysisResponse = {
@@ -274,18 +272,6 @@ export async function analyzeTransactionFraud(payload: {
   amount: number;
   asset?: string;
 }): Promise<TransactionAnalysisResponse> {
-  try {
-    const response = await fetch(`${X402_API_BASE_URL}/api/security/transaction-analysis`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    return parseApiResponse<TransactionAnalysisResponse>(response);
-  } catch {
-    return {
-      success: true,
-      message: 'Transaction Analysis Passed',
-      data: { fraudDetected: false, recommendation: 'PROCEED' }
-    };
-  }
+  const response = await fetchWithX402(payload.senderWallet, '/api/v1/security/transaction-analysis', payload);
+  return parseApiResponse<TransactionAnalysisResponse>(response);
 }

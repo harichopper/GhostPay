@@ -573,17 +573,11 @@ export default function SendScreen() {
         return;
       }
 
-      const X402_MERCHANT_VAULT = 'EI5WNOWDB2S5MOHNVZXNVUULCKBMUG4BC5AZUAL2S5T2PZ5DW2FCF4KYCA';
-
-      // ONLINE MODE: Step 1: Execute On-Chain 0.005 ALGO x402 Micro-Payment Transfer
-      setProcessingStatus('x402 Micro-Fee: Deducting 0.005 ALGO...');
-      await enqueueOfflinePayment(X402_MERCHANT_VAULT, 0.005);
-
-      // Step 2: Parallel x402 Security Verification (All 3 API checks run concurrently)
+      // X402 fetch requests pay and settle each security check before returning.
       setProcessingStatus('Verifying x402 AI Security Shield...');
       const [merchantCheck, riskAssessment, fraudCheck] = await Promise.all([
         validateReceiverMerchant(targetAddress, walletAddress),
-        fetchWalletRiskScore(walletAddress, targetAddress),
+        fetchWalletRiskScore(walletAddress, targetAddress, numericAmount, 'ALGO'),
         analyzeTransactionFraud({
           senderWallet: walletAddress,
           receiverWallet: targetAddress,
