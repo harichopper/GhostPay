@@ -12,7 +12,11 @@ The repository contains:
 - Optional Algorand smart-contract enforcement for payments.
 - Local encrypted wallet secret-key storage through Expo SecureStore on supported native platforms.
 
-The paid x402 service endpoint is currently empty and will be added later.
+The paid X402 security service is available in the sibling
+`GhostPay-X402-Endpoints` project. The mobile app pays each security request
+with the active wallet through X402 before it continues with a payment.
+- **Real X402 payment signing from the locally stored wallet secret key.**
+- **Live sender wallet-risk checks using Algorand Algod and Indexer data.**
 
 ## Implemented Features
 
@@ -255,8 +259,26 @@ Interactive API documentation is available at `/api/docs` when the backend is ru
 ## Paid x402 Endpoint
 
 ```text
-
+POST /api/v1/security/wallet-risk
+POST /api/v1/security/sender-validation
+POST /api/v1/security/receiver-validation
+POST /api/v1/security/transaction-analysis
 ```
+
+The app calls these routes through `@x402/fetch`. The flow is:
+
+```text
+Mobile wallet -> HTTP 402 -> local Algorand signature -> facilitator settlement
+              -> X-PAYMENT retry -> live security response
+```
+
+Configure `GhostPay-X402-Endpoints/.env` with `FACILITATOR_URL`, a valid
+funded `RESOURCE_PAY_TO` address, Algod and Indexer URLs, and MongoDB. The
+sender wallet must contain its secret key locally and hold enough Testnet ALGO
+to pay the X402 fee. Network or persistence failures are returned as errors;
+the app does not approve a payment using a mock security fallback.
+
+See `GhostPay-X402-Endpoints/README.md` for the complete local test command.
 
 ## Smart Contract
 

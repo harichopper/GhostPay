@@ -227,7 +227,7 @@ export type WalletRiskResponse = {
 };
 
 export async function fetchWalletRiskScore(senderWallet: string, receiverWallet: string, amount: number, asset = 'ALGO'): Promise<WalletRiskResponse> {
-  const response = await fetchWithX402(senderWallet, '/api/v1/security/wallet-risk', {
+  const response = await fetchWithX402(senderWallet, '/api/v1/security/sender-validation', {
     senderWallet,
     receiverWallet,
     amount,
