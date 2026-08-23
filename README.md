@@ -71,6 +71,21 @@ The x402 demo also created a separate real USDC settlement through GoPlausible. 
 
 Settlement time: `2026-08-23T11:12:33.933Z`
 
+### End-to-End x402 ALGO Payment
+
+This request used the x402 `POST /api/x402/pay` flow: GoPlausible settled the USDC micropayment first, then GhostPay submitted the contract-backed ALGO transfer to the receiver.
+
+| Item | Value |
+|---|---|
+| ALGO transfer | 0.1 ALGO |
+| ALGO transaction | `AX5S7DJFFONADVTMVF2MZKGSEQWE5VKNB7MHAC6ZRS6F3KSG76RA` |
+| ALGO confirmation | Round 66590032 |
+| ALGO explorer | [Lora](https://lora.algokit.io/testnet/transaction/AX5S7DJFFONADVTMVF2MZKGSEQWE5VKNB7MHAC6ZRS6F3KSG76RA) |
+| GoPlausible USDC settlement | `GZQ5NBCKNMASLH3ATVUIF62D4OZFY7XOZVKWJRFATEKP6435WINQ` |
+| USDC explorer | [Lora](https://lora.algokit.io/testnet/transaction/GZQ5NBCKNMASLH3ATVUIF62D4OZFY7XOZVKWJRFATEKP6435WINQ) |
+| Facilitator | [GoPlausible](https://facilitator.goplausible.xyz) |
+| Settled at | `2026-08-23T11:18:31.311Z` |
+
 **Payer wallet (opted in, awaiting USDC):**
 
 ```text
