@@ -30,6 +30,7 @@ import Animated, {
   ZoomIn
 } from 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
+import { PaymentPinScreen } from '../../src/components/security/PaymentPinScreen';
 import { WalletOnboardingCard } from '../../src/components/WalletOnboardingCard';
 import { useWalletStore } from '../../src/store/walletStore';
 import { colors } from '../../src/theme/colors';
@@ -417,6 +418,54 @@ export default function SendScreen() {
 
   const [errorModalMessage, setErrorModalMessage] = useState<string | null>(null);
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
+  const [isPaymentPinVisible, setIsPaymentPinVisible] = useState(false);
+
+  const handleConfirmPaymentPress = async () => {
+    if (isSubmitting) return;
+
+    const trimmedRecipient = recipient.trim();
+    if (!trimmedRecipient) {
+      setErrorModalMessage('Please enter a mobile number or wallet address.');
+      return;
+    }
+
+    const inputAmount = parseFloat(amount);
+    if (isNaN(inputAmount) || inputAmount <= 0) {
+      setErrorModalMessage('Please enter a valid amount to send.');
+      return;
+    }
+
+    let targetAddress = recipientIdentity?.primaryAddress?.trim() || trimmedRecipient;
+
+    if (isPhoneLike(trimmedRecipient)) {
+      const resolvedPhoneAddress = await resolveSupportedPhoneAddress(trimmedRecipient);
+      if (!resolvedPhoneAddress) {
+        setErrorModalMessage('This phone number is not linked to a supported Algorand wallet');
+        return;
+      }
+      targetAddress = resolvedPhoneAddress;
+      setRecipientIdentity((prev) => ({
+        name: prev?.name || 'Verified Vault Member',
+        verified: true,
+        primaryAddress: resolvedPhoneAddress
+      }));
+    } else if (!isValidAlgorandAddress(trimmedRecipient)) {
+      setErrorModalMessage('Invalid Algorand wallet address');
+      return;
+    }
+
+    if (!isValidAlgorandAddress(targetAddress)) {
+      setErrorModalMessage('Invalid Algorand wallet address');
+      return;
+    }
+
+    if (targetAddress === walletAddress) {
+      setErrorModalMessage('You cannot send a payment to your own wallet');
+      return;
+    }
+
+    setIsPaymentPinVisible(true);
+  };
 
   const handleSendPayment = async () => {
     if (isSubmitting) return;
@@ -811,7 +860,7 @@ export default function SendScreen() {
                   {/* Submit Payment Button */}
                   <Pressable
                     style={[styles.sendSubmitButton, isSubmitting && { opacity: 0.6 }]}
-                    onPress={handleSendPayment}
+                    onPress={() => void handleConfirmPaymentPress()}
                     disabled={isSubmitting}
                   >
                     <Text style={styles.sendSubmitText}>
@@ -869,6 +918,18 @@ export default function SendScreen() {
           </View>
         </View>
       </Modal>
+
+      <PaymentPinScreen
+        visible={isPaymentPinVisible}
+        amount={amount}
+        currencyMode={currencyMode}
+        displayCurrency={displayCurrency}
+        onAuthorized={() => {
+          setIsPaymentPinVisible(false);
+          void handleSendPayment();
+        }}
+        onCancel={() => setIsPaymentPinVisible(false)}
+      />
 
       {/* Custom Payment Error Alert Modal */}
       <Modal
