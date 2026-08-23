@@ -485,13 +485,24 @@ describe('input validation — Algorand address and network', () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 7. HTTP LAYER — REAL MONGODB
+// These tests exercise account logic over HTTP. API key auth is disabled for
+// this block (via withApiKey('')) because auth is already tested in section 9.
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('HTTP /api/accounts — real MongoDB', () => {
   let app: ReturnType<typeof buildTestApp>;
+  let savedKey: string;
 
   beforeEach(() => {
+    savedKey = env.accountsApiKey;
+    // @ts-ignore test mutation — disable auth for these logic tests
+    env.accountsApiKey = '';
     app = buildTestApp();
+  });
+
+  afterEach(() => {
+    // @ts-ignore test cleanup
+    env.accountsApiKey = savedKey;
   });
 
   it('POST 201 — creates and persists account', async () => {
@@ -638,7 +649,7 @@ describe('HTTP /api/accounts — real MongoDB', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('bidirectional HTTP lookup — real MongoDB', () => {
-  it('POST then GET phone and GET walletId return the same account', async () => {
+  it('POST then GET phone and GET walletId return the same account', withApiKey('', async () => {
     const app = buildTestApp();
 
     const createRes = await request(app)
@@ -664,7 +675,7 @@ describe('bidirectional HTTP lookup — real MongoDB', () => {
     expect(byPhone.body.account.walletId).toBe(byWallet.body.account.walletId);
     expect(byPhone.body.account.walletAddress).toBe(byWallet.body.account.walletAddress);
     expect(byPhone.body.account.network).toBe(byWallet.body.account.network);
-  });
+  }));
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -736,7 +747,7 @@ describe('API key authentication', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('x402 consumer flow — real MongoDB', () => {
-  it('phone-first resolution: phone → walletId → walletAddress → network', async () => {
+  it('phone-first resolution: phone → walletId → walletAddress → network', withApiKey('', async () => {
     const app = buildTestApp();
 
     // x402 consumer registers the account mapping
@@ -758,9 +769,9 @@ describe('x402 consumer flow — real MongoDB', () => {
 
     // x402 knows exactly which network to route on
     expect(['testnet', 'mainnet', 'localnet']).toContain(account.network);
-  });
+  }));
 
-  it('walletId-first resolution: walletId → phone → walletAddress → network', async () => {
+  it('walletId-first resolution: walletId → phone → walletAddress → network', withApiKey('', async () => {
     const app = buildTestApp();
 
     await request(app)
@@ -777,9 +788,9 @@ describe('x402 consumer flow — real MongoDB', () => {
     expect(account.walletAddress).toBe(ADDR_B);
     expect(account.network).toBe('mainnet');
     expect(account.accountId).toMatch(/^acct_/);
-  });
+  }));
 
-  it('full end-to-end x402 flow: create → lookup phone → lookup wallet → assert consistency', async () => {
+  it('full end-to-end x402 flow: create → lookup phone → lookup wallet → assert consistency', withApiKey('', async () => {
     const app = buildTestApp();
 
     // Step 1: Create the account mapping
@@ -807,7 +818,7 @@ describe('x402 consumer flow — real MongoDB', () => {
     expect(byWallet.body.account.accountId).toBe(accountId);
     expect(byPhone.body.account.network).toBe(network);
     expect(byWallet.body.account.network).toBe(network);
-  });
+  }));
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -8,10 +8,15 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "deploy:contract": "tsx src/scripts/deployContract.ts",
+    "opt-in-usdc": "tsx src/scripts/optInUsdc.ts",
+    "demo:x402": "tsx src/scripts/demoSecurityFlow.ts",
+    "demo:security": "tsx src/scripts/demoSecurityFlow.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@x402/avm": "^2.23.0",
+    "@x402/core": "^2.23.0",
     "algosdk": "^3.2.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

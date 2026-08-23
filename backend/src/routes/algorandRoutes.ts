@@ -8,6 +8,7 @@ import {
   getAccountBalance,
   getAccountTransactions,
   getNetworkInfo,
+  getPaymentParams,
   getSignerAddress,
   sendAlgoPayment
 } from '../services/algorandService.js';
@@ -19,6 +20,36 @@ function decimalPlaces(value: number): number {
   return split[1]?.length ?? 0;
 }
 
+/**
+ * Map a service-layer error code to an appropriate HTTP status.
+ * 4xx for client / transaction errors; 5xx for infrastructure.
+ */
+function txnErrorToStatus(code: string | undefined): number {
+  switch (code) {
+    case 'TXN_INVALID':
+    case 'TXN_WRONG_TYPE':
+    case 'TXN_WRONG_SENDER':
+    case 'TXN_WRONG_RECEIVER':
+    case 'TXN_WRONG_AMOUNT':
+    case 'TXN_WRONG_NOTE':
+    case 'TXN_WRONG_APP_ID':
+    case 'TXN_WRONG_APP_ARGS':
+    case 'TXN_GROUP_INVALID':
+      return 422;
+    case 'TXN_WRONG_NETWORK':
+    case 'TXN_EXPIRED':
+    case 'CONTRACT_REQUIRED':
+    case 'CONTRACT_NOT_CONFIGURED':
+    case 'INSUFFICIENT_FUNDS':
+    case 'SIGNER_NOT_CONFIGURED':
+      return 400;
+    case 'DEMO_DISABLED':
+      return 403;
+    default:
+      return 500;
+  }
+}
+
 algorandRouter.get('/network', (_request, response) => {
   response.json({
     ...getNetworkInfo(),
@@ -26,149 +57,94 @@ algorandRouter.get('/network', (_request, response) => {
   });
 });
 
-/**
- * @openapi
- * /api/algorand/signer:
- *   get:
- *     summary: Retrieve the backend signer account address
- *     tags: [Algorand]
- *     responses:
- *       200:
- *         description: Signer address retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 signerAddress:
- *                   type: string
- */
 algorandRouter.get('/signer', (_request, response) => {
   response.json({ signerAddress: getSignerAddress() });
 });
 
-/**
- * @openapi
- * /api/algorand/balance/{address}:
- *   get:
- *     summary: Retrieve the ALGO balance of a wallet address
- *     tags: [Algorand]
- *     parameters:
- *       - in: path
- *         name: address
- *         required: true
- *         schema:
- *           type: string
- *         description: The Algorand address to query
- *         example: "VMOY...ALGO...ADDR"
- *     responses:
- *       200:
- *         description: Balance retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 balanceAlgo:
- *                   type: number
- *       400:
- *         description: Invalid Algorand address
- *       500:
- *         description: Internal server error loading balance
- */
 algorandRouter.get('/balance/:address', async (request, response) => {
   try {
     const { address } = request.params;
-
     if (!algosdk.isValidAddress(address)) {
       response.status(400).json({ error: 'Invalid Algorand address' });
       return;
     }
-
     const balanceAlgo = await getAccountBalance(address);
     response.json({ balanceAlgo });
   } catch (error) {
-    response.status(500).json({
-      error: error instanceof Error ? error.message : 'Unable to load balance'
-    });
+    response.status(500).json({ error: error instanceof Error ? error.message : 'Unable to load balance' });
   }
 });
 
-/**
- * @openapi
- * /api/algorand/assets/{address}:
- *   get:
- *     summary: Retrieve assets held by an Algorand address
- *     tags: [Algorand]
- *     parameters:
- *       - in: path
- *         name: address
- *         required: true
- *         schema:
- *           type: string
- *         description: The Algorand address to query assets for
- *         example: "VMOY...ALGO...ADDR"
- *     responses:
- *       200:
- *         description: List of assets retrieved successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 assets:
- *                   type: array
- *                   items:
- *                     type: object
- *       400:
- *         description: Invalid Algorand address
- *       500:
- *         description: Internal server error loading assets
- */
 algorandRouter.get('/assets/:address', async (request, response) => {
   try {
     const { address } = request.params;
-
     if (!algosdk.isValidAddress(address)) {
       response.status(400).json({ error: 'Invalid Algorand address' });
       return;
     }
-
     const assets = await getAccountAssets(address);
     response.json({ assets });
   } catch (error) {
-    response.status(500).json({
-      error: error instanceof Error ? error.message : 'Unable to load account assets'
-    });
+    response.status(500).json({ error: error instanceof Error ? error.message : 'Unable to load account assets' });
   }
 });
 
 algorandRouter.get('/transactions/:address', async (request, response) => {
   try {
     const { address } = request.params;
-
     if (!algosdk.isValidAddress(address)) {
       response.status(400).json({ error: 'Invalid Algorand address' });
       return;
     }
-
     const transactions = await getAccountTransactions(address);
     response.json({ transactions });
   } catch (error) {
-    response.status(500).json({
-      error: error instanceof Error ? error.message : 'Unable to load transactions'
+    response.status(500).json({ error: error instanceof Error ? error.message : 'Unable to load transactions' });
+  }
+});
+
+/**
+ * GET /api/algorand/params
+ *
+ * Returns the minimum Algorand transaction parameters needed for offline
+ * transaction construction on the client.
+ *
+ * Validity window: params are valid for (lastValidRound - firstValidRound) rounds.
+ * On testnet each round is ~3.9 s → default ~65 minutes.
+ * Clients MUST re-fetch before the window expires.
+ *
+ * The genesisHashB64 field is the base64-encoded genesis hash — pass it to
+ * Buffer.from(genesisHashB64, 'base64') to reconstruct the Uint8Array that
+ * algosdk requires when building transactions offline.
+ */
+algorandRouter.get('/params', async (_request, response) => {
+  try {
+    const params = await getPaymentParams();
+    response.json(params);
+  } catch (error) {
+    response.status(503).json({
+      error: error instanceof Error ? error.message : 'Unable to fetch transaction parameters from Algorand node'
     });
   }
 });
 
 algorandRouter.post('/send', async (request, response) => {
   try {
-    const { sender, receiver, amount, timestamp, signedTxnBase64, demoMode } = request.body as {
+    const {
+      sender,
+      receiver,
+      amount,
+      timestamp,
+      signedTxnBase64,
+      signedGroupTxnsBase64,
+      demoMode
+    } = request.body as {
       sender?: string;
       receiver?: string;
       amount?: number;
       timestamp?: string;
       signedTxnBase64?: string;
+      signedGroupTxnsBase64?: string[];
       demoMode?: boolean;
     };
 
@@ -197,6 +173,7 @@ algorandRouter.post('/send', async (request, response) => {
       return;
     }
 
+    // Phone-number receiver resolution
     let targetReceiver = receiver.trim();
     if (!algosdk.isValidAddress(targetReceiver) && targetReceiver.replace(/\D/g, '').length >= 8) {
       try {
@@ -206,7 +183,7 @@ algorandRouter.post('/send', async (request, response) => {
           targetReceiver = primary.address;
         }
       } catch {
-        // Fallback
+        // Fallback to original receiver
       }
     }
 
@@ -215,6 +192,7 @@ algorandRouter.post('/send', async (request, response) => {
       return;
     }
 
+    // Identity gate
     if (env.requireIdentityForSend) {
       if (!isMongoConfigured()) {
         response.status(503).json({
@@ -225,7 +203,7 @@ algorandRouter.post('/send', async (request, response) => {
 
       const [senderIdentity, receiverIdentity] = await Promise.all([
         getIdentityByWallet(sender),
-        getIdentityByWallet(receiver)
+        getIdentityByWallet(targetReceiver)
       ]);
 
       if (!senderIdentity || !senderIdentity.verified) {
@@ -245,17 +223,21 @@ algorandRouter.post('/send', async (request, response) => {
 
     const tx = await sendAlgoPayment({
       sender,
-      receiver,
+      receiver: targetReceiver,
       amount,
       timestamp,
       signedTxnBase64,
+      signedGroupTxnsBase64,
       demoMode
     });
 
     response.json(tx);
   } catch (error) {
-    response.status(500).json({
-      error: error instanceof Error ? error.message : 'Unable to send transaction'
+    const code = (error as Error & { code?: string }).code;
+    const status = txnErrorToStatus(code);
+    response.status(status).json({
+      error: error instanceof Error ? error.message : 'Unable to send transaction',
+      ...(code ? { code } : {})
     });
   }
 });

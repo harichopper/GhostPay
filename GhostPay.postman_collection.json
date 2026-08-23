@@ -1,14 +1,15 @@
 {
   "info": {
     "name": "GhostPay API",
-    "description": "Complete API collection for the GhostPay backend. Base URL: http://localhost:4000\n\nAccount routes require the x-api-key header if ACCOUNTS_API_KEY is set in .env.\nIdentity routes require MongoDB to be configured.",
+    "description": "Complete API collection for the GhostPay backend.\n\nBase URL: http://localhost:4000\n\nAccount routes require the x-api-key header if ACCOUNTS_API_KEY is set in .env.\nIdentity routes require MongoDB to be configured.\n\n## x402 Flow (HTTP 402 Payment Protocol)\n\nThe security/wallet-risk and x402/pay endpoints are gated by the x402 protocol:\n1. Call without X-PAYMENT → receive HTTP 402 with PaymentRequired JSON\n2. Build a USDC payment using @x402/avm ExactAvmScheme on Algorand Testnet\n3. Base64-encode the PaymentPayload and retry with X-PAYMENT: <base64> header\n4. Backend calls GoPlausible facilitator /verify → /settle\n5. On success: HTTP 200 + X-PAYMENT-RESPONSE header with real Algorand txId\n\nFacilitator: https://facilitator.goplausible.xyz\nNetwork: Algorand Testnet (CAIP-2: algorand:SGO1GKSzyE7IEPItTxCByw9x8FmnrCDexi9/cOUJOiI=)\nAsset: USDC ASA ID 10458941 (testnet)\nPrice: $0.10 USDC per call\n\nNOTE: Do not put real secrets in this collection. Use variables for addresses.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
       "value": "http://localhost:4000",
-      "type": "string"
+      "type": "string",
+      "description": "GhostPay backend base URL"
     },
     {
       "key": "apiKey",
@@ -18,18 +19,26 @@
     },
     {
       "key": "senderAddress",
-      "value": "EAUTOEMDXQ37NRPJPZZF6WJWT6LCCHXRQDQZRQXSZ4ZES4E5TM3HI",
-      "type": "string"
+      "value": "REPLACE_WITH_YOUR_ALGORAND_TESTNET_ADDRESS",
+      "type": "string",
+      "description": "Your Algorand Testnet sender address"
     },
     {
       "key": "receiverAddress",
-      "value": "Q65TYCXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXR4P2KU",
-      "type": "string"
+      "value": "REPLACE_WITH_RECEIVER_ALGORAND_TESTNET_ADDRESS",
+      "type": "string",
+      "description": "Receiver Algorand Testnet address"
+    },
+    {
+      "key": "x402PaymentHeader",
+      "value": "",
+      "type": "string",
+      "description": "Base64-encoded x402 v2 PaymentPayload JSON. Build with @x402/avm ExactAvmScheme.createPaymentPayload() and base64-encode. Leave empty to test 402 response."
     }
   ],
   "item": [
     {
-      "name": "Health",
+      "name": "1. Health",
       "item": [
         {
           "name": "Health Check",
@@ -40,13 +49,13 @@
               "host": ["{{baseUrl}}"],
               "path": ["health"]
             },
-            "description": "Returns { ok: true } if the server is running."
+            "description": "Returns { ok: true, service: 'ghostpay-backend' } if the server is running."
           }
         }
       ]
     },
     {
-      "name": "Algorand",
+      "name": "2. Algorand",
       "item": [
         {
           "name": "Get Network Info",
@@ -69,7 +78,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "algorand", "signer"]
             },
-            "description": "Returns the Algorand address derived from ALGORAND_SENDER_MNEMONIC."
+            "description": "Returns the Algorand address derived from ALGORAND_SENDER_MNEMONIC. The x402 payTo address defaults to this."
           }
         },
         {
@@ -97,7 +106,7 @@
           }
         },
         {
-          "name": "Get Assets",
+          "name": "Get Assets (ALGO + ASAs)",
           "request": {
             "method": "GET",
             "url": {
@@ -105,11 +114,23 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "algorand", "assets", "{{senderAddress}}"]
             },
-            "description": "Returns all ASA holdings + native ALGO balance for the given address."
+            "description": "Returns all ASA holdings including USDC (ASA 10458941 on testnet). Check USDC balance before running x402 demo."
           }
         },
         {
-          "name": "Send — Demo Mode",
+          "name": "Get Transaction Params (offline signing)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/algorand/params",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "algorand", "params"]
+            },
+            "description": "Returns Algorand network params for offline transaction construction: genesisId, genesisHashB64, firstValidRound, lastValidRound, minFee, contractAppId. Cache these to sign transactions while offline."
+          }
+        },
+        {
+          "name": "Send ALGO — Demo Mode (fake txId)",
           "request": {
             "method": "POST",
             "header": [
@@ -122,14 +143,14 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 0.01,\n  \"timestamp\": \"2026-08-19T19:00:00.000Z\",\n  \"demoMode\": true\n}",
+              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 0.001,\n  \"timestamp\": \"2026-08-23T12:00:00.000Z\",\n  \"demoMode\": true\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Simulates a confirmed transaction without hitting the chain. Returns a DEMO-prefixed txId. Requires ALLOW_DEMO_MODE=true in .env."
+            "description": "Simulates a confirmed transaction without hitting the chain. Returns a DEMO-prefixed txId. Requires ALLOW_DEMO_MODE=true in .env (disabled in production)."
           }
         },
         {
-          "name": "Send — Missing Fields (400)",
+          "name": "Send ALGO — Missing Fields (400)",
           "request": {
             "method": "POST",
             "header": [
@@ -142,59 +163,19 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"amount\": 0.01\n}",
+              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"amount\": 0.001\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Expects 400 — receiver and timestamp are missing."
-          }
-        },
-        {
-          "name": "Send — Amount Too Large (400)",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/algorand/send",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "algorand", "send"]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 999999,\n  \"timestamp\": \"2026-08-19T19:00:00.000Z\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "description": "Expects 400 — amount exceeds MAX_ALGO_PER_TX."
-          }
-        },
-        {
-          "name": "Send — Invalid Address (400)",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/algorand/send",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "algorand", "send"]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sender\": \"bad-address\",\n  \"receiver\": \"also-bad\",\n  \"amount\": 0.01,\n  \"timestamp\": \"2026-08-19T19:00:00.000Z\"\n}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "description": "Expects 400 — Invalid Algorand sender or receiver address."
+            "description": "Expects 400 — receiver and timestamp are required fields."
           }
         }
       ]
     },
     {
-      "name": "Identity (requires MongoDB)",
+      "name": "3. Identity (requires MongoDB)",
       "item": [
         {
-          "name": "Request Verification (OTP)",
+          "name": "Request OTP Verification",
           "request": {
             "method": "POST",
             "header": [
@@ -210,7 +191,7 @@
               "raw": "{\n  \"mobileNumber\": \"+12025550123\"\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Generates an OTP for the given mobile number. With SMS_PROVIDER=none the OTP is returned in the response (REVEAL_OTP_IN_RESPONSE=true in dev)."
+            "description": "Generates a 6-digit OTP for the mobile number. With REVEAL_OTP_IN_RESPONSE=true (dev), the devOtpCode is returned in the response."
           }
         },
         {
@@ -230,7 +211,7 @@
               "raw": "{\n  \"mobileNumber\": \"+12025550123\"\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Alias for request-verification. Same behaviour."
+            "description": "Alias for POST /api/identity/request-verification."
           }
         },
         {
@@ -250,7 +231,7 @@
               "raw": "{\n  \"mobileNumber\": \"+12025550123\",\n  \"otpCode\": \"123456\",\n  \"walletAddress\": \"{{senderAddress}}\",\n  \"walletLabel\": \"My Wallet\"\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Submits the OTP received from request-verification. On success, links the wallet address to the verified mobile number."
+            "description": "Validates the OTP and links the wallet address to the mobile identity. Required before sending ALGO when REQUIRE_IDENTITY_FOR_SEND=true."
           }
         },
         {
@@ -262,7 +243,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "identity", "mobile", "%2B12025550123", "wallets"]
             },
-            "description": "Returns all wallets linked to the given mobile number. Mobile must be URL-encoded (+12025550123 → %2B12025550123)."
+            "description": "Returns all wallets linked to the given mobile number."
           }
         },
         {
@@ -274,33 +255,13 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "identity", "wallet", "{{senderAddress}}"]
             },
-            "description": "Returns the identity record (mobile, verified flag) linked to the given wallet address."
-          }
-        },
-        {
-          "name": "Request Verification — Missing Body (400)",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/identity/request-verification",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "identity", "request-verification"]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": { "raw": { "language": "json" } }
-            },
-            "description": "Expects 400 — mobileNumber is required."
+            "description": "Reverse lookup: returns the mobile identity linked to the given wallet address."
           }
         }
       ]
     },
     {
-      "name": "Accounts (requires MongoDB + API Key)",
+      "name": "4. Accounts (requires MongoDB + API Key)",
       "item": [
         {
           "name": "Create Account",
@@ -317,10 +278,10 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phone\": \"+12025550123\",\n  \"walletId\": \"wallet-001\",\n  \"walletAddress\": \"{{senderAddress}}\"\n}",
+              "raw": "{\n  \"phone\": \"+12025550123\",\n  \"walletId\": \"wallet-demo-001\",\n  \"walletAddress\": \"{{senderAddress}}\",\n  \"network\": \"testnet\"\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Creates a new phone ↔ walletId ↔ walletAddress mapping. Returns 409 if phone, walletId, or walletAddress already exists."
+            "description": "Creates a phone ↔ walletId ↔ walletAddress mapping. Returns 409 if any of phone, walletId, or walletAddress already exists."
           }
         },
         {
@@ -335,7 +296,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "accounts", "phone", "%2B12025550123"]
             },
-            "description": "Resolves an account by phone number. Phone must be URL-encoded."
+            "description": "Resolves an account by phone number (URL-encoded)."
           }
         },
         {
@@ -346,15 +307,15 @@
               { "key": "x-api-key", "value": "{{apiKey}}" }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/accounts/wallet/wallet-001",
+              "raw": "{{baseUrl}}/api/accounts/wallet/wallet-demo-001",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "accounts", "wallet", "wallet-001"]
+              "path": ["api", "accounts", "wallet", "wallet-demo-001"]
             },
-            "description": "Resolves an account by walletId."
+            "description": "Resolves an account by application-level walletId."
           }
         },
         {
-          "name": "Get Account by Phone — Not Found (404)",
+          "name": "Get Account — Not Found (404)",
           "request": {
             "method": "GET",
             "header": [
@@ -365,28 +326,242 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "accounts", "phone", "%2B19999999999"]
             },
-            "description": "Expects 404 — no account for this number."
+            "description": "Expects 404 — no account for this phone number."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. x402 — Payment Protocol (GoPlausible + Algorand Testnet)",
+      "item": [
+        {
+          "name": "x402 Status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/x402/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "x402", "status"]
+            },
+            "description": "Returns x402 configuration: network (Algorand Testnet CAIP-2), USDC asset ID, payTo address, GoPlausible facilitator URL and online status. No payment required."
           }
         },
         {
-          "name": "Create Account — Duplicate (409)",
+          "name": "x402 Payment Required (pre-flight)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/x402/payment-required",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "x402", "payment-required"]
+            },
+            "description": "Returns the full PaymentRequired JSON for /api/x402/pay. Use this to pre-build the USDC payment with @x402/avm before calling the gated endpoint."
+          }
+        },
+        {
+          "name": "x402 Pay — No Payment → 402",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/x402/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "x402", "pay"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 0.001,\n  \"timestamp\": \"2026-08-23T12:00:00.000Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "STEP 1 of x402 demo: Call without X-PAYMENT header → receive HTTP 402 with full PaymentRequired JSON. The response contains the payment requirements you need to build the USDC payment."
+          }
+        },
+        {
+          "name": "x402 Pay — With Valid Payment → 200",
           "request": {
             "method": "POST",
             "header": [
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-api-key", "value": "{{apiKey}}" }
+              {
+                "key": "x-payment",
+                "value": "{{x402PaymentHeader}}",
+                "description": "Base64-encoded x402 v2 PaymentPayload. Build with @x402/avm ExactAvmScheme.createPaymentPayload() on Algorand Testnet."
+              }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/accounts",
+              "raw": "{{baseUrl}}/api/x402/pay",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "accounts"]
+              "path": ["api", "x402", "pay"]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phone\": \"+12025550123\",\n  \"walletId\": \"wallet-001\",\n  \"walletAddress\": \"{{senderAddress}}\"\n}",
+              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 0.001,\n  \"timestamp\": \"2026-08-23T12:00:00.000Z\"\n}",
               "options": { "raw": { "language": "json" } }
             },
-            "description": "Run after Create Account. Expects 409 — ACCOUNT_EXISTS."
+            "description": "STEP 7 of x402 demo: Retry with valid X-PAYMENT header → GoPlausible verifies + settles → HTTP 200 with X-PAYMENT-RESPONSE header containing the Algorand txId."
+          }
+        },
+        {
+          "name": "x402 Pay — Invalid Payment → 402",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              {
+                "key": "x-payment",
+                "value": "dGhpcyBpcyBub3QgYSB2YWxpZCBwYXltZW50",
+                "description": "Base64 of 'this is not a valid payment' — deliberately invalid"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/x402/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "x402", "pay"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 0.001,\n  \"timestamp\": \"2026-08-23T12:00:00.000Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "REJECTION TEST: X-PAYMENT header contains invalid base64 JSON → HTTP 402 with error. Confirms forged/malformed payments are rejected."
+          }
+        },
+        {
+          "name": "x402 Premium Params — No Payment → 402",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/x402/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "x402", "pay"]
+            },
+            "description": "GET /api/x402/pay without X-PAYMENT → HTTP 402. Returns premium Algorand transaction parameters after valid payment."
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Security — x402-Gated AI Wallet Risk Analysis",
+      "item": [
+        {
+          "name": "Security Status (public)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/security/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "security", "status"]
+            },
+            "description": "Returns security service configuration: payment amount ($0.10 USDC), network, asset, facilitator URL and online status. No payment required — use for service discovery."
+          }
+        },
+        {
+          "name": "Security Payment Required (pre-flight)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/security/payment-required",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "security", "payment-required"]
+            },
+            "description": "Returns the full PaymentRequired JSON for /api/security/wallet-risk. Use to pre-build the USDC payment before calling the gated analysis endpoint."
+          }
+        },
+        {
+          "name": "Wallet Risk — No Payment → 402 (judge demo step 1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/security/wallet-risk",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "security", "wallet-risk"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 1.5\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "JUDGE DEMO STEP 1: Call without X-PAYMENT → HTTP 402 with PaymentRequired JSON.\n\nThe response contains:\n- x402Version: 2\n- accepts[0].scheme: 'exact'\n- accepts[0].network: Algorand Testnet CAIP-2\n- accepts[0].asset: '10458941' (USDC)\n- accepts[0].amount: '100000' ($0.10 USDC)\n- accepts[0].extra.feePayer: GoPlausible feePayer address\n\nUse this to build your USDC payment with @x402/avm ExactAvmScheme."
+          }
+        },
+        {
+          "name": "Wallet Risk — With Valid Payment → 200 (judge demo step 8)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              {
+                "key": "x-payment",
+                "value": "{{x402PaymentHeader}}",
+                "description": "Base64-encoded x402 v2 PaymentPayload (USDC transfer on Algorand Testnet). Build with @x402/avm ExactAvmScheme.createPaymentPayload(paymentRequired.accepts[0], signerAddress). Base64-encode the result."
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/security/wallet-risk",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "security", "wallet-risk"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 1.5\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "JUDGE DEMO STEP 8: Retry with valid X-PAYMENT header.\n\nFlow:\n1. GoPlausible /verify validates the USDC payment on Algorand Testnet\n2. GoPlausible /settle broadcasts and confirms the transaction\n3. Real Algorand txId returned in response + X-PAYMENT-RESPONSE header\n4. On-chain risk analysis executes\n5. HTTP 200 with full risk result\n\nResponse includes:\n- overall.risk: LOW/MEDIUM/HIGH/CRITICAL\n- overall.recommendation: SAFE_TO_PROCEED etc.\n- payment.txId: REAL Algorand Testnet transaction ID\n- payment.verified: true\n\nVerify the txId at: https://lora.algokit.io/testnet"
+          }
+        },
+        {
+          "name": "Wallet Risk — Invalid Payment → 402 (forged txId rejected)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              {
+                "key": "x-payment",
+                "value": "eyJ4NDAyVmVyc2lvbiI6MiwicGF5bG9hZCI6eyJwYXltZW50R3JvdXAiOlsiRkFLRUZBS0VGQUtFRkFLRUZBS0VGQUtFRkFLRUZBS0UiXSwicGF5bWVudEluZGV4IjowfX0=",
+                "description": "Deliberately crafted payload with fake txId FAKEFAKEFAKEFAKEFAKE — will be rejected by GoPlausible /verify"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/security/wallet-risk",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "security", "wallet-risk"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"{{senderAddress}}\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 1.5\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "REJECTION TEST: Forged txId in payment payload → GoPlausible /verify returns isValid:false → HTTP 402 with error message. Confirms no client-provided txId is trusted."
+          }
+        },
+        {
+          "name": "Wallet Risk — Invalid Sender Address (400 after payment)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              {
+                "key": "x-payment",
+                "value": "{{x402PaymentHeader}}",
+                "description": "Valid payment header — bad address is caught after the gate"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/security/wallet-risk",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "security", "wallet-risk"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sender\": \"INVALID_NOT_AN_ALGORAND_ADDRESS\",\n  \"receiver\": \"{{receiverAddress}}\",\n  \"amount\": 1.5\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Address validation fires after payment succeeds. Invalid sender → 400 with error message. Note: without X-PAYMENT the gate fires first (402)."
           }
         }
       ]

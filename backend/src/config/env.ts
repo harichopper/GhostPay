@@ -59,5 +59,16 @@ export const env = {
   enforceContract: process.env.ENFORCE_CONTRACT === 'true',
   requireIdentityForSend: process.env.REQUIRE_IDENTITY_FOR_SEND !== 'false',
   // x402 account mapping — set to a strong secret in production; leave empty for open dev access
-  accountsApiKey: process.env.ACCOUNTS_API_KEY ?? ''
+  accountsApiKey: process.env.ACCOUNTS_API_KEY ?? '',
+  // x402 payment protocol — GoPlausible facilitator URL
+  x402FacilitatorUrl: process.env.X402_FACILITATOR_URL ?? 'https://facilitator.goplausible.xyz',
+  // x402 payTo address — Algorand address that receives USDC micropayments
+  // Defaults to the signer wallet. Set X402_PAY_TO in .env to use a separate treasury wallet.
+  x402PayTo: process.env.X402_PAY_TO ?? '',
+  // x402 network — CAIP-2 identifier (defaults to Algorand Testnet)
+  x402Network: process.env.X402_NETWORK ?? '',
+  // x402 asset — USDC ASA ID (testnet: 10458941, mainnet: 31566704)
+  x402Asset: process.env.X402_ASSET ?? '',
+  // x402 price in USD cents for security analysis (default: 10 = $0.10)
+  x402PriceCents: parsePositiveNumber(process.env.X402_PRICE_CENTS, 10)
 };

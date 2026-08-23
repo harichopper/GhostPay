@@ -29,6 +29,8 @@ const EXPECTED_ROUTES: string[] = [
   'GET /api/algorand/signer',
   'GET /api/algorand/balance/{address}',
   'GET /api/algorand/assets/{address}',
+  'GET /api/algorand/transactions/{address}',
+  'GET /api/algorand/params',
   'POST /api/algorand/send',
 
   // Identity
@@ -42,14 +44,20 @@ const EXPECTED_ROUTES: string[] = [
   'POST /api/accounts',
   'GET /api/accounts/phone/{phone}',
   'GET /api/accounts/wallet/{walletId}',
+
+  // x402
+  'GET /api/x402/status',
+  'GET /api/x402/payment-required',
+  'POST /api/x402/pay',
+  'GET /api/x402/pay',
+
+  // Security (x402-gated AI-agent wallet risk analysis)
+  'GET /api/security/status',
+  'GET /api/security/payment-required',
+  'POST /api/security/wallet-risk',
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Convert Express path params (:foo) to OpenAPI style ({foo}) */
-function expressToOpenApi(path: string): string {
-  return path.replace(/:([^/]+)/g, '{$1}');
-}
 
 /** Collect all "METHOD /path" entries from an OpenAPI document */
 function collectSpecRoutes(spec: ReturnType<typeof buildOpenApiSpec>): string[] {
@@ -106,6 +114,8 @@ describe('OpenAPI spec coverage audit', () => {
     expect(tagNames).toContain('Algorand');
     expect(tagNames).toContain('Identity');
     expect(tagNames).toContain('Accounts');
+    expect(tagNames).toContain('x402');
+    expect(tagNames).toContain('Security');
   });
 
   it('spec defines BearerApiKey security scheme', () => {
@@ -153,7 +163,9 @@ describe('OpenAPI spec coverage audit', () => {
 
   it('all $ref values point to existing schema components', () => {
     const specJson = JSON.stringify(spec);
-    const refs = [...specJson.matchAll(/"\\$ref"\s*:\s*"#\/components\/schemas\/([^"]+)"/g)]
+    // Match "$ref": "#/components/schemas/SchemaName" in the serialised JSON.
+    // In JSON the dollar sign is not escaped, so the literal text is "$ref".
+    const refs = [...specJson.matchAll(/"\$ref"\s*:\s*"#\/components\/schemas\/([^"]+)"/g)]
       .map(m => m[1]);
 
     const definedSchemas = Object.keys(spec.components?.schemas ?? {});

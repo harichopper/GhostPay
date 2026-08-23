@@ -64,8 +64,8 @@ async function deployContract() {
     onComplete: algosdk.OnApplicationComplete.NoOpOC,
     approvalProgram,
     clearProgram,
-    numGlobalInts: 2,
-    numGlobalByteSlices: 4,
+    numGlobalInts: 3,      // payment_count, last_amount_micro, _reserved
+    numGlobalByteSlices: 4, // admin, last_sender, last_receiver, last_ts
     numLocalInts: 0,
     numLocalByteSlices: 0
   });
