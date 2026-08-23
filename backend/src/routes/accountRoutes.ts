@@ -14,7 +14,7 @@
  */
 
 import { Router, type Request, type Response } from 'express';
-import { isMongoConfigured } from '../db/mongo.js';
+import { connectMongo, isMongoConfigured } from '../db/mongo.js';
 import { requireApiKey } from '../middleware/requireApiKey.js';
 import {
   createAccount,
@@ -29,7 +29,8 @@ export const accountRouter = Router();
 accountRouter.use(requireApiKey);
 
 // Require MongoDB on all account routes
-accountRouter.use((_request, response, next) => {
+accountRouter.use(async (_request, response, next) => {
+  await connectMongo().catch(() => {});
   if (!isMongoConfigured()) {
     response.status(503).json({
       success: false,
