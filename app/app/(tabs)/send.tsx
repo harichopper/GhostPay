@@ -4,6 +4,7 @@ import * as Clipboard from 'expo-clipboard';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -177,6 +178,7 @@ function getDynamicRecentContacts(transactions: GhostTransaction[], currentWalle
 
 export default function SendScreen() {
   const router = useRouter();
+  const isFocused = useIsFocused();
   const { walletAddress, balanceAlgo, enqueueOfflinePayment, isConnected, demoMode, transactions, displayCurrency, algoRates, fetchExchangeRates } = useWalletStore();
   const { width } = useWindowDimensions();
   const isDesktop = Platform.OS === 'web' && width > 768;
@@ -876,7 +878,7 @@ export default function SendScreen() {
       </LinearGradient>
 
       {/* Animated Camera Permission Request Popup Overlay */}
-      {activeTab === 'scan' && Boolean(permission && !permission.granted) && (
+      {walletAddress && isFocused && activeTab === 'scan' && Boolean(permission && !permission.granted) && (
         <Modal transparent animationType="fade" visible={Boolean(permission && !permission.granted)}>
           <View style={styles.modalOverlay}>
             <Animated.View entering={ZoomIn.duration(400).springify().damping(14)} style={styles.permissionPopupCard}>
